@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef, us
 import { VisualizerSettings, UserInteractionState } from '../types';
 import { StudioRenderer } from '../core/Renderer';
 import { AudioProcessor } from '../core/AudioProcessor';
+import { audioEngine } from '../core/AudioEngine';
 
 export interface VisualizerHandle {
   startRecording: (duration: number) => void;
@@ -21,6 +22,11 @@ interface Props {
   logoUrl?: string | null;
   bgVideoUrl?: string | null;
   bgImageUrl?: string | null;
+  currentTime?: number;
+  duration?: number;
+  onTogglePlay?: () => void;
+  onSeekRelative?: (seconds: number) => void;
+  onSeekTo?: (time: number) => void;
   onRecordingComplete?: (blobUrl: string) => void;
   onRecordingStatusChange?: (recording: boolean) => void;
 }
@@ -37,6 +43,11 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   logoUrl,
   bgVideoUrl,
   bgImageUrl,
+  currentTime = 0,
+  duration = 0,
+  onTogglePlay,
+  onSeekRelative,
+  onSeekTo,
   onRecordingComplete,
   onRecordingStatusChange
 }, ref) => {
@@ -63,6 +74,8 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   });
   const lastPointerPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showHud, setShowHud] = useState(false);
+  const hudTimeoutRef = useRef<number | null>(null);
 
   // Render Durumu ve İlerleme
   const [internalRecording, setInternalRecording] = useState(false);
@@ -361,8 +374,9 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
       const canvasStream = canvasRef.current.captureStream(60);
       const tracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
 
-      if (audioTrack) {
-        tracks.push(audioTrack);
+      const effectiveAudioTrack = audioTrack || audioEngine.getAudioStreamTrack();
+      if (effectiveAudioTrack) {
+        tracks.push(effectiveAudioTrack);
       }
 
       const combinedStream = new MediaStream(tracks);
@@ -400,9 +414,9 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
         recorder.start(100); // 100ms chunks
         mediaRecorderRef.current = recorder;
 
-        // Audio çalmayı baştan başlat
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(e => console.warn("Audio play warning during render:", e));
+        // Audio çalmayı baştan başlat (AudioEngine üzerinden)
+        audioEngine.seek(0);
+        audioEngine.play().catch(e => console.warn("Audio play warning during render:", e));
 
         const startTime = Date.now();
         progressTimerRef.current = window.setInterval(() => {
@@ -452,13 +466,71 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     }
   };
 
+  const triggerHudActivity = useCallback(() => {
+    setShowHud(true);
+    if (hudTimeoutRef.current) {
+      window.clearTimeout(hudTimeoutRef.current);
+    }
+    hudTimeoutRef.current = window.setTimeout(() => {
+      setShowHud(false);
+    }, 2800);
+  }, []);
+
   useEffect(() => {
     const handleFSChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const fs = Boolean(document.fullscreenElement);
+      setIsFullscreen(fs);
+      if (fs) {
+        triggerHudActivity();
+      }
     };
     document.addEventListener('fullscreenchange', handleFSChange);
     return () => document.removeEventListener('fullscreenchange', handleFSChange);
-  }, []);
+  }, [triggerHudActivity]);
+
+  // Global & Fullscreen Keyboard Shortcut Handler (ArrowLeft, ArrowRight, Space)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onTogglePlay) {
+          onTogglePlay();
+        } else if (audioRef.current) {
+          if (audioRef.current.paused) {
+            audioRef.current.play().catch(() => {});
+          } else {
+            audioRef.current.pause();
+          }
+        }
+        triggerHudActivity();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onSeekRelative) {
+          onSeekRelative(-5);
+        } else if (audioRef.current) {
+          audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 5);
+        }
+        triggerHudActivity();
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onSeekRelative) {
+          onSeekRelative(5);
+        } else if (audioRef.current) {
+          audioRef.current.currentTime = Math.min(audioRef.current.duration || 99999, audioRef.current.currentTime + 5);
+        }
+        triggerHudActivity();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [onTogglePlay, onSeekRelative, audioRef, triggerHudActivity]);
 
   // Pointer & Touch Handlers for 3D Orbit, Fluid Ripples & Magnetic Attractor
   const getCanvasCoords = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -474,6 +546,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    triggerHudActivity();
     const coords = getCanvasCoords(e);
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
     const inter = interactionRef.current;
@@ -496,6 +569,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    triggerHudActivity();
     const coords = getCanvasCoords(e);
     const inter = interactionRef.current;
     inter.pointerX = coords.x;
@@ -523,10 +597,15 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     inter.styleVariant = (inter.styleVariant + 1) % 10;
     inter.paletteIndex = (inter.paletteIndex + 1) % 5;
     inter.glitchBoost = 0.9;
+    triggerHudActivity();
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden group select-none">
+    <div 
+      ref={containerRef} 
+      onMouseMove={triggerHudActivity}
+      className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden group select-none"
+    >
       
       {/* Dynamic Hidden Video Element for Background Video Layer */}
       <video 
@@ -539,7 +618,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
       />
       
       {/* Tam Ekran & HD Rozeti (Top Controls) */}
-      <div className="absolute top-3 right-3 z-30 flex items-center gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+      <div className={`absolute top-3 right-3 z-30 flex items-center gap-2 transition-opacity duration-300 ${isFullscreen && !showHud ? 'opacity-0 pointer-events-none' : 'opacity-80 group-hover:opacity-100'}`}>
         <span className="bg-black/70 border border-yellow-400/40 text-yellow-400 text-[10px] font-mono px-2 py-1 rounded-sm shadow-md">
           {settings.aspectRatio} | {settings.mode}
         </span>
@@ -555,6 +634,94 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
           )}
         </button>
       </div>
+
+      {/* FLOATING HUD TRANSPORT CONTROLS (Tam Ekran Modunda Otomatik Gizlenen Player Bar) */}
+      {isFullscreen && (
+        <div 
+          className={`absolute bottom-6 inset-x-0 mx-auto w-[92%] max-w-xl z-40 bg-[#0A0A0E]/85 backdrop-blur-md border border-yellow-400/30 rounded-xl p-3.5 flex flex-col gap-2.5 shadow-2xl transition-all duration-300 ${
+            showHud ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'
+          }`}
+        >
+          {/* Scrubber Progress Bar */}
+          <div className="flex items-center gap-3 w-full">
+            <span className="text-[11px] font-mono text-zinc-400 min-w-[38px]">{formatSecs(currentTime)}</span>
+            <input
+              type="range"
+              min="0"
+              max={duration || 100}
+              step="0.1"
+              value={currentTime}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (onSeekTo) onSeekTo(val);
+                else if (audioRef.current) audioRef.current.currentTime = val;
+                triggerHudActivity();
+              }}
+              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#FFD700]"
+            />
+            <span className="text-[11px] font-mono text-zinc-500 min-w-[38px]">{formatSecs(duration)}</span>
+          </div>
+
+          {/* Transport Buttons */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (onSeekRelative) onSeekRelative(-5);
+                  else if (audioRef.current) audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 5);
+                  triggerHudActivity();
+                }}
+                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 rounded-lg text-xs font-mono font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                title="5 Saniye Geri (←)"
+              >
+                <span>⏪</span>
+                <span>-5s</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onTogglePlay) onTogglePlay();
+                  else if (audioRef.current) {
+                    if (audioRef.current.paused) audioRef.current.play();
+                    else audioRef.current.pause();
+                  }
+                  triggerHudActivity();
+                }}
+                className="px-5 py-1.5 bg-[#FFD700] hover:bg-yellow-300 text-black font-black rounded-lg text-xs tracking-wider uppercase transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                title="Oynat / Durdur (Space)"
+              >
+                {isPlaying ? '⏸ DURDUR' : '▶ OYNAT'}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onSeekRelative) onSeekRelative(5);
+                  else if (audioRef.current) audioRef.current.currentTime = Math.min(duration || 99999, audioRef.current.currentTime + 5);
+                  triggerHudActivity();
+                }}
+                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 rounded-lg text-xs font-mono font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                title="5 Saniye İleri (→)"
+              >
+                <span>+5s</span>
+                <span>⏩</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-400">
+              <span className="hidden sm:inline bg-zinc-900/90 border border-white/10 px-2.5 py-1 rounded text-zinc-300">
+                ← / → : 5s | Space : Play
+              </span>
+              <button
+                onClick={toggleFullscreen}
+                className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 rounded transition-colors cursor-pointer"
+                title="Tam Ekrandan Çık (Esc)"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Interactive Canvas Viewport */}
       <canvas

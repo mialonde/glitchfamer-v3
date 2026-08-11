@@ -51,11 +51,85 @@ export type VisualizerMode =
   | 'OBJ_FACE_MASK'
   | 'VRM_ANIME_HYBRID';
 
+export type VisemeCode = 'REST' | 'A' | 'E' | 'I' | 'O' | 'U' | 'M' | 'F' | 'L' | 'S';
+
+export interface PerformanceLayerConfig {
+  layer1LipSyncEnabled: boolean;        // Layer 1: Lip Sync & Phoneme Occlusion
+  layer2FacialExpressionEnabled: boolean; // Layer 2: Eyebrows, subtle smile/relaxed tone
+  layer3EyeTrackingEnabled: boolean;    // Layer 3: Gaze look-at target, saccades, human blinking
+  layer4BreathingEnabled: boolean;      // Layer 4: Breathing cycle, ribcage expansion, pre-vocal inhale
+  layer5BodyIdleEnabled: boolean;       // Layer 5: Tempo-synced head sway, beat response, relaxed posture
+  layer6HairPhysicsEnabled: boolean;    // Layer 6: Secondary inertia lag & VRM spring bone smoothing
+}
+
+export interface PhonemeToken {
+  phoneme: VisemeCode;
+  char: string;
+  type: 'vowel' | 'consonant' | 'bilabial' | 'fricative';
+  relativeStart: number; // 0.0 - 1.0 (kelime içi normalize başlangıç)
+  relativeEnd: number;   // 0.0 - 1.0 (kelime içi normalize bitiş)
+  startTime?: number;    // Mutlak saniye
+  endTime?: number;      // Mutlak saniye
+  isVowelNucleus?: boolean;
+}
+
+export interface SyncedWord {
+  word: string;
+  startTime: number;
+  endTime: number;
+  phonemes?: PhonemeToken[];
+}
+
 export interface SyncedLine {
   startTime: number;
   endTime: number;
   text: string;
-  words?: { word: string; startTime: number; endTime: number }[];
+  words?: SyncedWord[];
+}
+
+export interface SunoTimelineWord {
+  word: string;
+  startTime: number;
+  endTime: number;
+}
+
+export interface SunoWordTimestamp {
+  text: string;
+  startTime: number;
+  endTime: number;
+}
+
+export interface TrackMetadata {
+  id?: string;
+  title: string;
+  artist: string;
+  image?: string;
+  imageUrl?: string;
+  audioUrl: string;
+  lyrics: string;
+  source: 'suno' | 'local' | 'demo';
+  duration?: number;
+  tags?: string;
+  lyricsTimeline?: SunoTimelineWord[];
+  syncedLines?: SyncedLine[];
+  hasWordLevelTimestamps?: boolean;
+}
+
+export interface NormalizedSunoTrack {
+  id: string;
+  title: string;
+  artist: string;
+  lyrics: string;
+  audioUrl: string;
+  imageUrl?: string;
+  image?: string;
+  duration?: number;
+  tags?: string;
+  words: SunoWordTimestamp[];
+  lyricsTimeline: SunoTimelineWord[];
+  syncedLines: SyncedLine[];
+  hasWordLevelTimestamps: boolean;
+  source: 'suno';
 }
 
 export type LyricsStyle = 'KINETIC' | 'KARAOKE' | 'SUBTITLE' | 'NEON_BOX' | 'CYBER_GLITCH';
@@ -65,6 +139,8 @@ export interface VisualizerSettings {
   mode: VisualizerMode;
   aspectRatio: '9/16' | '1/1' | '16/9';
   avatarMode?: 'anime' | 'hologram'; // Hologram or Solid Anime style
+  vrmModelUrl?: string;             // 3D VRM Model dosya yolu veya blob URL (örn: /models/Nutachisan.vrm)
+  vrmModelName?: string;            // Seçilen modelin adı
   intensity: number;
   
   // Efekt Aç/Kapa ve İnce Ayarlar
@@ -115,6 +191,9 @@ export interface VisualizerSettings {
   lyricsFontSize: number;
   lyricsColor: string;
   syncedLyrics: SyncedLine[];
+  
+  // 3D Avatar Performans Katmanı Konfigürasyonu (6-Layer Architecture)
+  performanceLayers?: Partial<PerformanceLayerConfig>;
   
   displacement?: number;
   jitter?: number;
@@ -196,6 +275,7 @@ export interface AudioEvents {
   highEnergy?: number;
   trebleEnergy?: number;
   vocalEnergy?: number;
+  vocalRMS?: number;
   delta?: number;
 }
 

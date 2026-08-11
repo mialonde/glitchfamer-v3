@@ -5,15 +5,36 @@ import {
   Sliders, Music, Type, Layers, Check, Search,
   Volume2, VolumeX, RotateCcw, FastForward, Rewind,
   Maximize2, Eye, EyeOff, CheckCircle2, ChevronRight,
-  Bookmark, FolderDown, Terminal
+  Bookmark, FolderDown, Terminal, User, Box
 } from "lucide-react";
 import { VisualizerCanvas, VisualizerHandle } from "./components/VisualizerCanvas";
 import { EffectsStudio } from "./components/EffectsStudio";
 import { LyricsStudio } from "./components/LyricsStudio";
 import { PresetManager } from "./components/PresetManager";
-import { VisualizerSettings, VisualizerMode } from "./types";
+import { SunoImporter } from "./components/SunoImporter";
+import { VisualizerSettings, VisualizerMode, NormalizedSunoTrack } from "./types";
 import { PresetService } from "./services/presetService";
+import { getMeseleDemoSyncedLyrics } from "./services/lyricSyncService";
+import { audioEngine } from "./core/AudioEngine";
 import { cn } from "./lib/utils";
+
+// Yerleşik 3D VRM Karakter Modelleri
+const VRM_AVATAR_MODELS = [
+  {
+    id: 'alicia',
+    name: 'Alicia Solid',
+    url: '/models/AliciaSolid.vrm',
+    desc: 'Orijinal Standart Anime Avatarı (VRM 0.0)',
+    badge: 'STANDART'
+  },
+  {
+    id: 'nutachisan',
+    name: 'Nutachisan',
+    url: '/models/Nutachisan.vrm',
+    desc: 'Özel Yüklenen Anime Karakteri (VRM 0.0)',
+    badge: 'ÖZEL MODEL'
+  }
+];
 
 // Hazır Euphoric & Sinematik Video Döngüleri
 const EUPHORIC_VIDEO_PRESETS = [
@@ -122,7 +143,7 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   
   // Medya ve Zaman
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>('/demo-items/MESELE.flac');
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [bgVideoUrl, setBgVideoUrl] = useState<string | null>(null);
@@ -146,6 +167,9 @@ export default function App() {
   const [serverVideoUrl, setServerVideoUrl] = useState<string | null>(null);
   const [serverQuality, setServerQuality] = useState<'1080p' | '720p'>('1080p');
 
+  // Suno Link Importer Modal Durumu
+  const [isSunoModalOpen, setIsSunoModalOpen] = useState(false);
+
   // Ham Dosya Referansları
   const [audioFileBlob, setAudioFileBlob] = useState<Blob | File | null>(null);
   const [coverFileBlob, setCoverFileBlob] = useState<Blob | File | null>(null);
@@ -163,7 +187,7 @@ export default function App() {
   const [settings, setSettings] = useState<VisualizerSettings>({
     mode: 'NEON_TUNNEL',
     aspectRatio: '16/9',
-    avatarMode: 'hologram',
+    avatarMode: 'anime',
     intensity: 1.0,
     rgbSplitEnabled: false,
     rgbSplit: 0.25,
@@ -193,19 +217,14 @@ export default function App() {
     secondaryColor: '#FFFFFF',
     bgMode: 'GRID',
     bgOpacity: 0.06,
-    trackTitle: '',
-    artistName: '',
+    trackTitle: 'Mesele',
+    artistName: 'Demo',
     lyricsEnabled: true,
     lyricsStyle: 'KINETIC',
     lyricsPosition: 'BOTTOM',
     lyricsFontSize: 42,
     lyricsColor: '#FFD700',
-    syncedLyrics: [
-      { startTime: 0.0, endTime: 4.0, text: "Gecenin içinde kaybolan ışıklar" },
-      { startTime: 4.0, endTime: 8.0, text: "Neon sokaklarda yankılanan sesler" },
-      { startTime: 8.0, endTime: 12.0, text: "Zaman durur ama ritim devam eder" },
-      { startTime: 12.0, endTime: 16.0, text: "Gözlerini kapat ve akışa bırak" }
-    ],
+    syncedLyrics: getMeseleDemoSyncedLyrics(),
     bgImageUrl: null,
     bgImageOpacity: 0.7,
     bgImageBlur: 0,
@@ -231,49 +250,35 @@ export default function App() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Web Audio Context & Analyser Başlatma (DSP bypass - clean audio)
+  // 1. AudioEngine State Senkronizasyonu & Tek Gerçek Kaynağı
   useEffect(() => {
-    if (audioUrl && audioRef.current && !analyserRef.current) {
-      try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const source = ctx.createMediaElementSource(audioRef.current);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 1024;
-        analyser.smoothingTimeConstant = 0.8;
-        
-        // Vocal emphasis filter (bandpass 500-3000Hz)
-        const vocalFilter = ctx.createBiquadFilter();
-        vocalFilter.type = 'bandpass';
-        vocalFilter.frequency.value = 1750; // Center frequency
-        vocalFilter.Q.value = 0.7; // Quality factor to cover roughly 500Hz - 3000Hz
+    const unsubscribe = audioEngine.subscribe((engineState) => {
+      setIsPlaying(engineState.isPlaying);
+      setCurrentTime(engineState.currentTime);
+      setDuration(engineState.duration);
+      setIsMuted(engineState.isMuted);
+      setAudioTrack(audioEngine.getAudioStreamTrack());
+      analyserRef.current = audioEngine.getMainAnalyser();
+      vocalAnalyserRef.current = audioEngine.getVocalAnalyser();
+    });
+    return () => unsubscribe();
+  }, []);
 
-        const vocalAnalyser = ctx.createAnalyser();
-        vocalAnalyser.fftSize = 1024;
-        vocalAnalyser.smoothingTimeConstant = 0.85;
-
-        // Temiz ses yönlendirmesi
-        source.connect(analyser);
-        analyser.connect(ctx.destination);
-        
-        // Vocal ses yönlendirmesi (sadece analiz için, hoparlöre gitmez)
-        source.connect(vocalFilter);
-        vocalFilter.connect(vocalAnalyser);
-        
-        // MediaStreamTrack oluştur (İstemci kaydı için)
-        const dest = ctx.createMediaStreamDestination();
-        source.connect(dest);
-        setAudioTrack(dest.stream.getAudioTracks()[0] || null);
-
-        analyserRef.current = analyser;
-        vocalAnalyserRef.current = vocalAnalyser;
-        setAudioContext(ctx);
-      } catch (e) {
-        console.warn("Web Audio başlatma uyarısı:", e);
-      }
+  // 2. Web Audio Context & MediaSource Bağlantısı (AudioEngine Tek Merkez)
+  useEffect(() => {
+    if (audioUrl && audioRef.current) {
+      audioEngine.attachAudioElement(audioRef.current);
+      analyserRef.current = audioEngine.getMainAnalyser();
+      vocalAnalyserRef.current = audioEngine.getVocalAnalyser();
+      setAudioTrack(audioEngine.getAudioStreamTrack());
     }
   }, [audioUrl]);
 
-  // Spacebar ile Oynat/Durdur Kısayolu
+  const seekRelative = (seconds: number) => {
+    audioEngine.seekRelative(seconds);
+  };
+
+  // Klavye Kısayolları (Space: Play/Pause, ←: -5s, →: +5s, 1-6: Sekmeler)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -282,6 +287,12 @@ export default function App() {
       if (e.code === 'Space') {
         e.preventDefault();
         togglePlay();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        seekRelative(-5);
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        seekRelative(5);
       } else if (e.code === 'Digit1') {
         setActiveTab('visualizer');
       } else if (e.code === 'Digit2') {
@@ -299,27 +310,13 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, audioUrl, audioContext]);
+  }, [isPlaying, audioUrl, duration]);
 
   const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (audioContext?.state === 'suspended') {
-      audioContext.resume();
-    }
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      audioRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(e => {
-          console.warn("Audio play error:", e);
-          setIsPlaying(false);
-        });
-    }
+    audioEngine.togglePlay();
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'AUDIO' | 'COVER' | 'LOGO' | 'BG_IMAGE' | 'VIDEO') => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'AUDIO' | 'COVER' | 'LOGO' | 'BG_IMAGE' | 'VIDEO' | 'VRM') => {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
@@ -353,25 +350,87 @@ export default function App() {
       setBgVideoUrl(url);
       setSettings(s => ({ ...s, bgVideoUrl: url }));
     }
+    if (type === 'VRM') {
+      if (settings.vrmModelUrl && settings.vrmModelUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(settings.vrmModelUrl);
+      }
+      setSettings(s => ({ 
+        ...s, 
+        mode: 'VRM_ANIME_HYBRID',
+        vrmModelUrl: url, 
+        vrmModelName: file.name 
+      }));
+    }
     e.target.value = '';
   };
 
-  // Demo / Örnek Müzik Yükleyici (Kullanıcı anında test edebilsin)
+  // Otomatik Demo Dosyası Blob Ön Yükleme (Render & Dışa Aktarma Desteği)
+  useEffect(() => {
+    fetch('/demo-items/MESELE.flac')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => setAudioFileBlob(blob))
+      .catch(err => console.warn("Demo audio blob ön yükleme uyarısı:", err));
+  }, []);
+
+  // Demo / Örnek Müzik Yükleyici (Mesele Demo Parçası & LRC)
   const loadDemoTrack = () => {
-    const demoAudioUrl = 'https://cdn.freesound.org/previews/612/612610_5674468-lq.mp3';
+    const demoAudioUrl = '/demo-items/MESELE.flac';
     setAudioUrl(demoAudioUrl);
     setSettings(s => ({
       ...s,
-      trackTitle: 'CYBER DRIVE 2077',
-      artistName: 'SYNTH RUNNER'
+      trackTitle: 'Mesele',
+      artistName: 'Demo',
+      lyricsEnabled: true,
+      syncedLyrics: getMeseleDemoSyncedLyrics()
     }));
+    fetch(demoAudioUrl)
+      .then(res => res.blob())
+      .then(blob => setAudioFileBlob(blob))
+      .catch(err => console.warn("Demo audio blob yükleme hatası:", err));
+  };
+
+  // Suno Linkinden Gelen Şarkıyı Projeye Aktar
+  const handleSunoImport = (track: NormalizedSunoTrack, audioBlob?: Blob | null) => {
+    // 1. Audio URL & Blob temizle ve ata
+    if (audioUrl && audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(track.audioUrl);
+    if (audioBlob) {
+      setAudioFileBlob(audioBlob);
+    } else {
+      // Arka planda blob indirmeyi dene (Render engine için)
+      fetch(track.audioUrl)
+        .then(res => res.blob())
+        .then(b => setAudioFileBlob(b))
+        .catch(err => console.warn("Suno audio blob arka plan indirme uyarısı:", err));
+    }
+    setVideoResultUrl(null);
+    setServerVideoUrl(null);
+
+    // 2. Kapak görseli ata
+    if (track.imageUrl) {
+      if (coverUrl && coverUrl.startsWith('blob:')) URL.revokeObjectURL(coverUrl);
+      setCoverUrl(track.imageUrl);
+    }
+
+    // 3. Ayarları güncelle
+    setSettings(s => ({
+      ...s,
+      trackTitle: track.title,
+      artistName: track.artist,
+      lyricsEnabled: true,
+      syncedLyrics: track.syncedLines && track.syncedLines.length > 0 ? track.syncedLines : s.syncedLyrics
+    }));
+
+    // 4. Zamanı başa al
+    setCurrentTime(0);
+    setIsSunoModalOpen(false);
   };
 
   const removeAudio = () => {
-    if (audioUrl && audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl);
-    if (audioContext && audioContext.state !== 'closed') {
-      audioContext.close().catch(() => {});
-    }
+    audioEngine.unloadTrack();
     analyserRef.current = null;
     vocalAnalyserRef.current = null;
     setAudioContext(null);
@@ -421,15 +480,12 @@ export default function App() {
 
   // İstemci Tarafı Render
   const startClientRender = () => {
-    if (!audioRef.current || !canvasHandleRef.current) return;
+    if (!audioUrl || !canvasHandleRef.current) return;
     setVideoResultUrl(null);
-    audioRef.current.currentTime = 0;
-    setCurrentTime(0);
+    audioEngine.seek(0);
     const recDuration = duration > 0 ? duration : 30;
     canvasHandleRef.current.startRecording(recDuration);
-    audioRef.current.play()
-      .then(() => setIsPlaying(true))
-      .catch(e => console.warn(e));
+    audioEngine.play().catch(e => console.warn(e));
   };
 
   // Sunucu Tarafı Render (SSR FFmpeg)
@@ -620,6 +676,16 @@ export default function App() {
 
         {/* Sağ: Render & Hızlı İndir Butonları */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsSunoModalOpen(true)}
+            className="bg-[#FFD700]/10 hover:bg-[#FFD700]/25 text-[#FFD700] border border-[#FFD700]/40 px-3 py-1.5 rounded-sm text-[9.5px] sm:text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(255,215,0,0.15)] cursor-pointer"
+            title="Suno AI Şarkı Bağlantısı ile İçe Aktar"
+          >
+            <Zap size={12} className="text-[#FFD700]" />
+            <span>SUNO İÇE AKTAR</span>
+          </button>
+
           {serverVideoUrl && (
             <a 
               href={serverVideoUrl} 
@@ -734,6 +800,14 @@ export default function App() {
                 logoUrl={logoUrl}
                 bgVideoUrl={bgVideoUrl}
                 bgImageUrl={bgImageUrl}
+                currentTime={currentTime}
+                duration={duration}
+                onTogglePlay={togglePlay}
+                onSeekRelative={seekRelative}
+                onSeekTo={(t) => {
+                  if (audioRef.current) audioRef.current.currentTime = t;
+                  setCurrentTime(t);
+                }}
                 onRecordingStatusChange={(rec) => setIsRecording(rec)}
                 onRecordingComplete={(url) => {
                   setVideoResultUrl(url);
@@ -760,11 +834,8 @@ export default function App() {
                   value={currentTime}
                   disabled={!audioUrl}
                   onChange={(e) => {
-                    if (audioRef.current) {
-                      const val = Number(e.target.value);
-                      audioRef.current.currentTime = val;
-                      setCurrentTime(val);
-                    }
+                    const val = Number(e.target.value);
+                    audioEngine.seek(val);
                   }}
                   className="w-full h-1.5 bg-zinc-800 rounded-lg accent-[#FFD700] appearance-none cursor-pointer disabled:opacity-30 transition-all"
                 />
@@ -781,12 +852,7 @@ export default function App() {
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (audioRef.current) {
-                      audioRef.current.currentTime = Math.max(0, currentTime - 5);
-                      setCurrentTime(audioRef.current.currentTime);
-                    }
-                  }}
+                  onClick={() => audioEngine.seekRelative(-5)}
                   disabled={!audioUrl}
                   title="5 Saniye Geri Sar"
                   className="p-1.5 text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:opacity-20"
@@ -806,12 +872,7 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    if (audioRef.current) {
-                      audioRef.current.currentTime = Math.min(duration, currentTime + 5);
-                      setCurrentTime(audioRef.current.currentTime);
-                    }
-                  }}
+                  onClick={() => audioEngine.seekRelative(5)}
                   disabled={!audioUrl}
                   title="5 Saniye İleri Sar"
                   className="p-1.5 text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:opacity-20"
@@ -821,12 +882,7 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    if (audioRef.current) {
-                      audioRef.current.currentTime = 0;
-                      setCurrentTime(0);
-                    }
-                  }}
+                  onClick={() => audioEngine.seek(0)}
                   disabled={!audioUrl}
                   title="Başa Dön"
                   className="p-1.5 text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:opacity-20 ml-1"
@@ -839,7 +895,7 @@ export default function App() {
               <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsMuted(!isMuted)}
+                  onClick={() => audioEngine.toggleMute()}
                   disabled={!audioUrl}
                   className="text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:opacity-20 p-1"
                   title={isMuted ? "Sesi Aç" : "Sesi Kapat"}
@@ -984,30 +1040,120 @@ export default function App() {
                 </div>
 
                 {settings.mode === 'VRM_ANIME_HYBRID' && (
-                  <div className="space-y-3 pt-2 border-t border-white/5">
+                  <div className="space-y-4 pt-3 border-t border-white/10 bg-black/40 p-3.5 rounded-sm border border-white/[0.08]">
+                    
+                    {/* VRM Karakter Seçici Başlığı */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-zinc-400">AVATAR STİLİ</span>
+                      <span className="text-[10px] font-mono font-bold text-zinc-300 uppercase tracking-widest flex items-center gap-1.5">
+                        <User size={13} className="text-[#FFD700]" />
+                        3D VRM AVATAR MODELİ
+                      </span>
+                      <span className="text-[8.5px] font-mono text-[#FFD700] bg-[#FFD700]/10 px-2 py-0.5 rounded border border-[#FFD700]/30 font-bold truncate max-w-[170px]">
+                        {settings.vrmModelName || (settings.vrmModelUrl?.includes('Nutachisan') ? 'Nutachisan.vrm' : 'AliciaSolid.vrm')}
+                      </span>
                     </div>
-                    <div className="flex bg-black/40 p-1 border border-white/5 rounded flex-wrap">
-                      <button
-                        onClick={() => setSettings({ ...settings, avatarMode: 'anime' })}
-                        className={cn(
-                          "flex-1 text-[10px] py-1.5 font-bold uppercase tracking-wider rounded cursor-pointer transition-colors",
-                          settings.avatarMode === 'anime' ? "bg-[#FFD700] text-black" : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
-                        )}
-                      >
-                        SOLID ANIME
-                      </button>
-                      <button
-                        onClick={() => setSettings({ ...settings, avatarMode: 'hologram' })}
-                        className={cn(
-                          "flex-1 text-[10px] py-1.5 font-bold uppercase tracking-wider rounded cursor-pointer transition-colors",
-                          settings.avatarMode === 'hologram' ? "bg-[#FFD700] text-black" : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
-                        )}
-                      >
-                        HOLOGRAM 3D
-                      </button>
+
+                    {/* Model Kartları Listesi */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {VRM_AVATAR_MODELS.map((model) => {
+                        const isCurrent = (settings.vrmModelUrl || '/models/AliciaSolid.vrm') === model.url;
+                        return (
+                          <button
+                            key={model.id}
+                            type="button"
+                            onClick={() => setSettings(s => ({ ...s, vrmModelUrl: model.url, vrmModelName: model.name }))}
+                            className={cn(
+                              "p-2.5 text-left border rounded-sm transition-all flex flex-col justify-between cursor-pointer group relative",
+                              isCurrent
+                                ? "bg-[#FFD700] text-black border-[#FFD700] font-black shadow-[0_0_12px_rgba(255,215,0,0.2)]"
+                                : "bg-black/60 text-zinc-300 border-white/[0.08] hover:border-zinc-700 hover:bg-white/[0.02]"
+                            )}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-[10px] font-bold uppercase truncate pr-1">
+                                {model.name}
+                              </span>
+                              <span className={cn(
+                                "text-[7px] font-mono px-1 py-0.2 rounded border",
+                                isCurrent ? "border-black/30 bg-black/10 text-black font-bold" : "border-zinc-800 text-zinc-500"
+                              )}>
+                                {model.badge}
+                              </span>
+                            </div>
+                            <p className={cn(
+                              "text-[8px] font-mono mt-1 line-clamp-1",
+                              isCurrent ? "text-zinc-900" : "text-zinc-500"
+                            )}>
+                              {model.desc}
+                            </p>
+                            <span className={cn(
+                              "text-[7.5px] font-mono mt-2 flex items-center gap-1",
+                              isCurrent ? "text-black font-bold" : "text-zinc-600 group-hover:text-zinc-400"
+                            )}>
+                              {isCurrent ? "✓ AKTİF MODEL" : "Modeli Seç →"}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
+
+                    {/* Özel .VRM Dosyası Yükleme Butonu */}
+                    <div className="space-y-2">
+                      <label className="border border-dashed border-zinc-800 hover:border-[#FFD700] p-2.5 rounded-sm flex items-center justify-center gap-2 cursor-pointer transition-colors bg-black/40 text-center group">
+                        <Upload size={13} className="text-zinc-500 group-hover:text-[#FFD700]" />
+                        <span className="text-[8.5px] font-mono uppercase text-zinc-300 group-hover:text-white font-bold">
+                          + BİLGİSAYARINDAN .VRM DOSYASI YÜKLE
+                        </span>
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept=".vrm,application/octet-stream,model/gltf-binary" 
+                          onChange={(e) => handleFileUpload(e, 'VRM')} 
+                        />
+                      </label>
+                      
+                      {/* Manuel Dosya Yolu / URL Girişi */}
+                      <div className="flex items-center gap-2 bg-black/60 border border-white/[0.06] p-1.5 rounded-sm">
+                        <Box size={12} className="text-zinc-500 shrink-0 ml-1" />
+                        <input
+                          type="text"
+                          placeholder="veya yol gir: /models/Nutachisan.vrm"
+                          value={settings.vrmModelUrl || ''}
+                          onChange={(e) => setSettings(s => ({ ...s, vrmModelUrl: e.target.value, vrmModelName: e.target.value.split('/').pop() || 'Custom Model' }))}
+                          className="w-full bg-transparent text-[8.5px] font-mono text-zinc-300 placeholder:text-zinc-600 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Avatar Render Stili */}
+                    <div className="space-y-1.5 pt-2 border-t border-white/[0.06]">
+                      <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">
+                        AVATAR RENDER STİLİ
+                      </span>
+                      <div className="flex bg-black/60 p-1 border border-white/[0.08] rounded gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, avatarMode: 'anime' })}
+                          className={cn(
+                            "flex-1 text-[9px] py-1.5 font-bold uppercase tracking-wider rounded cursor-pointer transition-colors",
+                            settings.avatarMode === 'anime' ? "bg-[#FFD700] text-black shadow-sm font-black" : "text-zinc-400 hover:text-white"
+                          )}
+                        >
+                          SOLID ANIME
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, avatarMode: 'hologram' })}
+                          className={cn(
+                            "flex-1 text-[9px] py-1.5 font-bold uppercase tracking-wider rounded cursor-pointer transition-colors",
+                            settings.avatarMode === 'hologram' ? "bg-[#FFD700] text-black shadow-sm font-black" : "text-zinc-400 hover:text-white"
+                          )}
+                        >
+                          HOLOGRAM 3D
+                        </button>
+                      </div>
+                    </div>
+
                   </div>
                 )}
 
@@ -1209,15 +1355,32 @@ export default function App() {
                     <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest">
                       SES DOSYASI
                     </span>
-                    {audioUrl && (
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={removeAudio}
-                        className="text-red-400 hover:text-red-300 text-[8.5px] font-mono uppercase flex items-center gap-1 cursor-pointer"
+                        onClick={() => setIsSunoModalOpen(true)}
+                        className="text-[#FFD700] hover:underline text-[8.5px] font-mono uppercase flex items-center gap-1 cursor-pointer font-bold"
                       >
-                        <Trash2 size={10} /> KALDIR
+                        <Zap size={10} /> SUNO LİNKİ GİR
                       </button>
-                    )}
+                      <span className="text-zinc-600">•</span>
+                      <button
+                        type="button"
+                        onClick={loadDemoTrack}
+                        className="text-zinc-400 hover:text-[#FFD700] text-[8.5px] font-mono uppercase flex items-center gap-1 cursor-pointer"
+                      >
+                        MESELE DEMO
+                      </button>
+                      {audioUrl && (
+                        <button
+                          type="button"
+                          onClick={removeAudio}
+                          className="text-red-400 hover:text-red-300 text-[8.5px] font-mono uppercase flex items-center gap-1 cursor-pointer ml-1"
+                        >
+                          <Trash2 size={10} /> KALDIR
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {audioUrl ? (
@@ -1228,17 +1391,48 @@ export default function App() {
                           {settings.trackTitle || "Ses Dosyası Yüklendi"}
                         </span>
                       </div>
-                      <label className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[8.5px] font-mono uppercase cursor-pointer shrink-0 ml-2">
-                        DEĞİŞTİR
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsSunoModalOpen(true)}
+                          className="px-2 py-1 bg-[#FFD700]/10 hover:bg-[#FFD700]/20 border border-[#FFD700]/40 text-[#FFD700] text-[8px] font-mono uppercase cursor-pointer"
+                          title="Suno Şarkısı Değiştir"
+                        >
+                          ⚡ SUNO
+                        </button>
+                        <label className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[8.5px] font-mono uppercase cursor-pointer">
+                          DEĞİŞTİR
+                          <input type="file" className="hidden" accept="audio/*" onChange={(e) => handleFileUpload(e, 'AUDIO')} />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsSunoModalOpen(true)}
+                        className="border border-[#FFD700]/40 bg-[#FFD700]/5 hover:bg-[#FFD700]/15 p-3.5 rounded-sm flex flex-col items-center justify-center gap-1 cursor-pointer transition-all group"
+                      >
+                        <Zap size={16} className="text-[#FFD700] group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-mono font-bold text-[#FFD700] uppercase">
+                          ⚡ SUNO LİNKİ İLE YÜKLE
+                        </span>
+                        <span className="text-[7.5px] font-mono text-zinc-500">
+                          Söz & Kapak Otomatik Çekilir
+                        </span>
+                      </button>
+
+                      <label className="border border-dashed border-zinc-800 hover:border-zinc-600 p-3.5 rounded-sm flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors bg-black/20 text-center group">
+                        <Upload size={16} className="text-zinc-500 group-hover:text-zinc-300" />
+                        <span className="text-[9px] font-mono font-bold text-zinc-300 uppercase">
+                          + DOSYA YÜKLE (.MP3/.WAV)
+                        </span>
+                        <span className="text-[7.5px] font-mono text-zinc-500">
+                          Bilgisayarından Seç
+                        </span>
                         <input type="file" className="hidden" accept="audio/*" onChange={(e) => handleFileUpload(e, 'AUDIO')} />
                       </label>
                     </div>
-                  ) : (
-                    <label className="border border-dashed border-zinc-800 p-4 rounded-sm flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-[#FFD700] transition-colors bg-black/20">
-                      <Upload size={16} className="text-zinc-500" />
-                      <span className="text-[9.5px] font-mono font-bold text-zinc-300 uppercase">+ SES DOSYASI YÜKLE (.MP3/.WAV)</span>
-                      <input type="file" className="hidden" accept="audio/*" onChange={(e) => handleFileUpload(e, 'AUDIO')} />
-                    </label>
                   )}
                 </div>
 
@@ -1476,6 +1670,53 @@ export default function App() {
                   )}
                 </div>
 
+                {/* 6. 3D Karakter / VRM Avatar Katmanı */}
+                <div className="bg-black/40 border border-white/[0.08] p-4 rounded-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <User size={13} className="text-[#FFD700]" />
+                      3D VRM AVATAR / KARAKTER
+                    </span>
+                    <span className="text-[8.5px] font-mono text-[#FFD700] bg-[#FFD700]/10 px-2 py-0.5 rounded border border-[#FFD700]/30 font-bold truncate max-w-[170px]">
+                      {settings.vrmModelName || (settings.vrmModelUrl?.includes('Nutachisan') ? 'Nutachisan.vrm' : 'AliciaSolid.vrm')}
+                    </span>
+                  </div>
+
+                  {/* Küratörlü / Yüklü VRM Modelleri */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {VRM_AVATAR_MODELS.map((model) => {
+                      const isCurrent = (settings.vrmModelUrl || '/models/AliciaSolid.vrm') === model.url;
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          onClick={() => setSettings(s => ({ ...s, mode: 'VRM_ANIME_HYBRID', vrmModelUrl: model.url, vrmModelName: model.name }))}
+                          className={cn(
+                            "p-2.5 text-left border rounded-sm transition-all flex flex-col justify-between cursor-pointer group relative",
+                            isCurrent
+                              ? "bg-[#FFD700] text-black border-[#FFD700] font-black"
+                              : "bg-black/60 text-zinc-300 border-white/[0.06] hover:border-zinc-700"
+                          )}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-[9px] font-bold uppercase truncate">{model.name}</span>
+                          </div>
+                          <span className={cn("text-[7.5px] font-mono mt-1", isCurrent ? "text-zinc-900" : "text-zinc-500")}>
+                            {isCurrent ? "✓ AKTİF MODEL" : "Seç & Kullan"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Özel VRM Dosyası Yükle */}
+                  <label className="border border-dashed border-zinc-800 p-2.5 rounded-sm flex items-center justify-center gap-2 cursor-pointer hover:border-[#FFD700] transition-colors bg-black/20 text-center">
+                    <Upload size={13} className="text-zinc-400" />
+                    <span className="text-[9px] font-mono uppercase text-zinc-300">+ YENİ 3D .VRM MODELİ YÜKLE</span>
+                    <input type="file" className="hidden" accept=".vrm,application/octet-stream,model/gltf-binary" onChange={(e) => handleFileUpload(e, 'VRM')} />
+                  </label>
+                </div>
+
               </div>
             )}
 
@@ -1691,6 +1932,13 @@ export default function App() {
         </aside>
 
       </div>
+
+      {/* Suno AI Link Importer Modalı */}
+      <SunoImporter
+        isOpen={isSunoModalOpen}
+        onClose={() => setIsSunoModalOpen(false)}
+        onImportTrack={handleSunoImport}
+      />
     </main>
   );
 }

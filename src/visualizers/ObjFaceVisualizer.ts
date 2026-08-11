@@ -1,5 +1,5 @@
 import { IVisualizer, AudioEvents, RenderContext, VisualizerSettings } from '../types';
-import { getLipSyncEnergy } from '../core/LipSync';
+import { getLipSyncBlendshapes } from '../core/LipSync';
 
 interface Vertex3D {
   baseX: number;
@@ -9,8 +9,12 @@ interface Vertex3D {
   x: number;
   y: number;
   z: number;
-  // Metadata for audio reaction
-  isJaw: boolean;
+  // Anatomical vertex weights for natural articulation
+  mouthWeight: number;
+  upperLipWeight: number;
+  lowerLipWeight: number;
+  cornerWeight: number;
+  jawWeight: number;
   shatterSeed: number;
 }
 
@@ -59,28 +63,17 @@ export class ObjFaceVisualizer implements IVisualizer {
 
   private parseObj(text: string) {
     const lines = text.split('\n');
-    const scale = 22; 
-    
-    // MediaPipe canonical face uses standard right-handed coordinates:
-    // +Y is UP (chin is ~ -9.4, forehead is ~ +8.2)
-    // +Z is FORWARD (nose is ~ +7.5)
-    // +X is RIGHT
-    
+    const rawVertices: { x: number; y: number; z: number }[] = [];
+    this.faces = [];
+    this.vertices = [];
+
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
       if (parts[0] === 'v') {
-        const x = parseFloat(parts[1]) * scale;
-        const y = parseFloat(parts[2]) * scale; 
-        const z = parseFloat(parts[3]) * scale;
-        
-        // Jaw region is negative Y (lower half of face)
-        const isJaw = y < -20;
-        
-        this.vertices.push({
-          baseX: x, baseY: y, baseZ: z,
-          x: 0, y: 0, z: 0,
-          isJaw,
-          shatterSeed: Math.random()
+        rawVertices.push({
+          x: parseFloat(parts[1]),
+          y: parseFloat(parts[2]),
+          z: parseFloat(parts[3])
         });
       } else if (parts[0] === 'f') {
         const faceIndices = parts.slice(1).map(p => parseInt(p.split('/')[0]) - 1);
@@ -93,7 +86,62 @@ export class ObjFaceVisualizer implements IVisualizer {
         }
       }
     }
-    
+
+    if (rawVertices.length === 0) return;
+
+    // Calculate center of mass for perfect rotation pivot
+    let sumX = 0, sumY = 0, sumZ = 0;
+    for (const v of rawVertices) {
+      sumX += v.x;
+      sumY += v.y;
+      sumZ += v.z;
+    }
+    const cX = sumX / rawVertices.length;
+    const cY = sumY / rawVertices.length;
+    const cZ = sumZ / rawVertices.length;
+
+    const scale = 24;
+    // Canonical mouth center in scaled OBJ coordinate space
+    const mX = (0 - cX) * scale;
+    const mY = (-4.26 - cY) * scale;
+    const mZ = (5.31 - cZ) * scale;
+
+    for (const v of rawVertices) {
+      const baseX = (v.x - cX) * scale;
+      const baseY = (v.y - cY) * scale;
+      const baseZ = (v.z - cZ) * scale;
+      
+      const dx = baseX - mX;
+      const dy = baseY - mY;
+      const dz = baseZ - mZ;
+      const mouthDist = Math.sqrt(dx * dx + dy * dy * 1.4 + dz * dz * 1.5);
+      const mouthWeight = Math.max(0, 1 - mouthDist / 48);
+
+      // Upper lip moves slightly upward on vowels / mouth opening
+      const upperLipWeight = mouthWeight * (dy >= -2 ? Math.min(1, Math.max(0, (dy + 2) / 10)) : 0);
+      // Lower lip moves downwards strongly
+      const lowerLipWeight = mouthWeight * (dy < -2 ? Math.min(1, Math.max(0, (-dy - 2) / 12)) : 0);
+      // Mouth corners move horizontally on smile / width
+      const cornerWeight = Math.abs(dx) > 10 ? mouthWeight * Math.min(1, (Math.abs(dx) - 8) / 22) : 0;
+      // Mandible / Chin bone rotation
+      const jawWeight = baseY < mY - 12 ? Math.min(1, Math.max(0, (mY - 12 - baseY) / 110)) : 0;
+
+      this.vertices.push({
+        baseX,
+        baseY,
+        baseZ,
+        x: 0,
+        y: 0,
+        z: 0,
+        mouthWeight,
+        upperLipWeight,
+        lowerLipWeight,
+        cornerWeight,
+        jawWeight,
+        shatterSeed: Math.random()
+      });
+    }
+
     this.isLoaded = true;
   }
 
@@ -101,7 +149,7 @@ export class ObjFaceVisualizer implements IVisualizer {
   }
 
   public render(context: RenderContext): void {
-    const { ctx, width, height, audio, interaction } = context;
+    const { ctx, width, height, audio, interaction, settings } = context;
 
     if (!this.isLoaded) {
       ctx.fillStyle = '#000';
@@ -138,22 +186,41 @@ export class ObjFaceVisualizer implements IVisualizer {
     const fov = 700;
     const viewDistance = 500 - (bass * 50);
 
-    // 1. Transform Vertices
-    const jawDrop = getLipSyncEnergy(audio, settings, mid) * 20; // Subtle jaw drop
+    // 1. Transform Vertices with Anatomically Realistic Blendshapes
+    const shapes = getLipSyncBlendshapes(audio, settings);
     
-    // Smooth global audio-reactive scale
-    const globalScale = 1 + bass * 0.05;
+    // Smooth global audio-reactive pulse (bass)
+    const globalScale = 1 + bass * 0.04;
 
     for (const v of this.vertices) {
       let vx = v.baseX * globalScale;
       let vy = v.baseY * globalScale;
       let vz = v.baseZ * globalScale;
 
-      // Smooth jaw drop (gradual based on Y)
-      if (vy < -20) {
-        const jawWeight = Math.min(1, (-vy - 20) / 150);
-        vy -= jawDrop * jawWeight;
-      }
+      // 1. Mouth Aperture: Lower lip drops, Upper lip lifts slightly
+      const lowerLipOffset = (shapes.mouth_open * 22 + shapes.jaw_drop * 14) * v.lowerLipWeight;
+      const upperLipOffset = (shapes.mouth_open * 5) * v.upperLipWeight;
+      vy -= lowerLipOffset;
+      vy += upperLipOffset;
+
+      // 2. Jaw Bone / Chin Drop (mandible hinge motion)
+      const chinDrop = shapes.jaw_drop * 18 * v.jawWeight;
+      vy -= chinDrop;
+      vz -= chinDrop * 0.15;
+
+      // 3. Mouth Width & Corner Spread (Smile / Vowels A, E)
+      const widthDelta = (shapes.mouth_width - 0.5) * 20;
+      vx += Math.sign(vx || 1) * widthDelta * v.cornerWeight;
+
+      // 4. Lip Rounding / Pucker (Vowels O, U)
+      const pucker = shapes.lip_round * 16;
+      vz += pucker * v.mouthWeight;
+      vx -= Math.sign(vx || 1) * (pucker * 0.4) * v.cornerWeight;
+
+      // 5. Lip Press (Consonants P, B, M)
+      const press = shapes.lip_press * 7;
+      if (v.lowerLipWeight > 0) vy += press * v.lowerLipWeight;
+      if (v.upperLipWeight > 0) vy -= press * v.upperLipWeight;
       
       // Rotate Y (Yaw)
       const rx = vx * cy + vz * sy;
@@ -191,12 +258,12 @@ export class ObjFaceVisualizer implements IVisualizer {
       const ny = uz * vx - ux * vz;
       const nz = ux * vy - uy * vx;
 
-      const normalX = -nx;
-      const normalY = -ny;
-      const normalZ = -nz;
+      const normalX = nx;
+      const normalY = ny;
+      const normalZ = nz;
 
-      // Backface culling
-      if (normalZ < 0) continue; 
+      // Backface culling: only render polygons facing towards the screen/camera
+      if (normalZ <= 0) continue; 
 
       const zAvg = (vA.z + vB.z + vC.z) / 3;
       

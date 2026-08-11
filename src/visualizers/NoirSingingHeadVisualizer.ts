@@ -1,5 +1,5 @@
 import { AudioEvents, IVisualizer, RenderContext, VisualizerSettings } from '../types';
-import { getLipSyncEnergy } from '../core/LipSync';
+import { getLipSyncBlendshapes } from '../core/LipSync';
 
 interface Vertex3D {
   baseX: number;
@@ -186,7 +186,12 @@ export class NoirSingingHeadVisualizer implements IVisualizer {
 
     // 2. Head Kinematics & Audio Reactivity
     const shatterIntensity = Math.pow(Math.max(0, bass - 0.8), 2) * 20 * fWeight; 
-    const jawDrop = Math.pow(getLipSyncEnergy(audio, settings, mid), 1.4) * 65 * fWeight; // Vocal sync
+    const shapes = getLipSyncBlendshapes(audio, settings);
+    const jawDrop = shapes.jaw_drop * 55 * fWeight;
+    const mouthOpen = shapes.mouth_open * 40 * fWeight;
+    const mouthWidthFactor = 1 + (shapes.mouth_width - 0.5) * 0.4 * fWeight;
+    const lipRound = shapes.lip_round * 16 * fWeight;
+    const lipPress = shapes.lip_press * 10 * fWeight;
     
     // Breathing & Nodding
     const targetRotX = Math.sin(audio.time * 2.5) * 0.12 * fWeight + (bass * 0.18) + (1 - fWeight) * audio.time * 0.5; 
@@ -214,20 +219,25 @@ export class NoirSingingHeadVisualizer implements IVisualizer {
             let y = v.sy * (1 - fWeight) + v.baseY * fWeight + Math.cos(audio.time * 4 + v.shatterSeed * 10) * noise;
             let z = v.sz * (1 - fWeight) + v.baseZ * fWeight + Math.sin(audio.time * 3 + v.shatterSeed * 10) * noise;
             
-            // Lip Sync & Jaw Drop
+            // Viseme Lip Sync & Jaw Drop
             if (v.isJaw > 0) {
                 y -= jawDrop * v.isJaw;
-                z -= jawDrop * 0.25 * v.isJaw;
+                z -= jawDrop * 0.2 * v.isJaw;
             }
             
-            // Mouth opening wider on audio mid
+            // Mouth opening, round & width based on active viseme
             if (v.isMouth > 0) {
+                x *= mouthWidthFactor;
+                // Lip round brings corners inwards and protrudes outwards on Z
+                z += lipRound * v.isMouth;
+                
                 if (v.baseY < -0.15 * 170) { // Lower lip
-                    y -= jawDrop * v.isMouth * 0.8;
+                    y -= (mouthOpen * 0.7 - lipPress) * v.isMouth;
                 } else { // Upper lip
-                    y += jawDrop * v.isMouth * 0.3;
+                    y += (mouthOpen * 0.3 - lipPress) * v.isMouth;
                 }
             }
+
             
             // Eye Blinking / Audio Reactive Squinting
             if (v.isEye > 0) {

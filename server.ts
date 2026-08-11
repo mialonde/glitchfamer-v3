@@ -380,6 +380,191 @@ async function startServer() {
     }
   });
 
+  // ============================================================
+  // 🎵 SUNO AI LINK INSPECTION & AUDIO PROXY API
+  // ============================================================
+
+  // 1. Suno Şarkı Bilgisi & Metadata Analizi
+  app.post("/api/suno/inspect", async (req, res) => {
+    try {
+      const { url, trackId: reqTrackId } = req.body;
+      const input = (url || reqTrackId || "").toString().trim();
+      
+      let trackId: string | null = reqTrackId || null;
+      let scrapedMetadata: any = null;
+
+      // Adım A: Doğrudan UUID veya bilinen URL kalıplarından Track ID ayıkla
+      if (!trackId && input) {
+        const uuidMatch = input.match(/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/);
+        if (uuidMatch) {
+          trackId = uuidMatch[1].toLowerCase();
+        } else {
+          const songMatch = input.match(/(?:song|clip|track)\/([a-zA-Z0-9_-]+)/i);
+          if (songMatch) {
+            trackId = songMatch[1];
+          } else {
+            const cdnMatch = input.match(/(?:cdn\d*|audiocdn\d*)\.suno\.(?:ai|com)\/([a-zA-Z0-9_-]+)\.mp3/i);
+            if (cdnMatch) {
+              trackId = cdnMatch[1];
+            }
+          }
+        }
+      }
+
+      // Adım B: Eğer /s/ short linki veya henüz UUID çıkarılamamış bir Suno web URL'i girilmişse
+      if ((!trackId || input.includes('/s/')) && /^https?:\/\//i.test(input)) {
+        try {
+          const pageRes = await fetch(input, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            redirect: "follow"
+          });
+
+          const finalUrl = pageRes.url || input;
+          const finalUuidMatch = finalUrl.match(/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/);
+          if (finalUuidMatch) {
+            trackId = finalUuidMatch[1].toLowerCase();
+          }
+
+          if (pageRes.ok) {
+            const html = await pageRes.text();
+
+            // HTML içinden UUID ara
+            if (!trackId) {
+              const htmlUuid = html.match(/(?:cdn\d*\.suno\.ai\/|clip\/|song\/|"id":\s*")([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/i);
+              if (htmlUuid) {
+                trackId = htmlUuid[1].toLowerCase();
+              }
+            }
+
+            // HTML Meta etiketlerini ayıkla
+            const ogTitle = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']*)["']/i)?.[1];
+            const ogAudio = html.match(/<meta[^>]*property=["']og:audio["'][^>]*content=["']([^"']*)["']/i)?.[1];
+            const ogImage = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']*)["']/i)?.[1];
+            const ogDesc = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']*)["']/i)?.[1];
+
+            scrapedMetadata = {
+              title: ogTitle,
+              audio_url: ogAudio,
+              image_url: ogImage,
+              description: ogDesc
+            };
+          }
+        } catch (scrapeErr) {
+          console.warn("Suno link scraping warning:", scrapeErr);
+        }
+      }
+
+      if (!trackId && !scrapedMetadata?.audio_url) {
+        return res.status(400).json({ error: "Geçerli bir Suno Track ID veya URL bulunamadı." });
+      }
+
+      // Adım C: Suno Studio Public API üzerinden parça verisini sorgula
+      let clipData: any = null;
+      if (trackId) {
+        const apiUrl = `https://studio-api.prod.suno.com/api/clip/${trackId}`;
+        try {
+          const apiRes = await fetch(apiUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "application/json"
+            }
+          });
+
+          if (apiRes.ok) {
+            clipData = await apiRes.json();
+          }
+        } catch (apiErr) {
+          console.warn("Suno Studio API fetch warning:", apiErr);
+        }
+      }
+
+      // Adım D: Fallback ve Scraped veri birleştirme
+      if (!clipData) {
+        const resolvedId = trackId || "suno-track";
+        clipData = {
+          id: resolvedId,
+          title: scrapedMetadata?.title || "Suno Track",
+          display_name: "Suno AI",
+          audio_url: scrapedMetadata?.audio_url || `https://cdn1.suno.ai/${resolvedId}.mp3`,
+          image_large_url: scrapedMetadata?.image_url || `https://cdn1.suno.ai/image_${resolvedId}.png`,
+          image_url: scrapedMetadata?.image_url || `https://cdn1.suno.ai/image_${resolvedId}.png`,
+          prompt: scrapedMetadata?.description || "",
+          metadata: {
+            duration: 180,
+            tags: "AI Music",
+            prompt: scrapedMetadata?.description || ""
+          }
+        };
+      }
+
+      res.json(clipData);
+    } catch (error: any) {
+      console.error("Suno inspect error:", error);
+      res.status(500).json({ error: error?.message || "Suno şarkı bilgisi alınamadı." });
+    }
+  });
+
+  // 2. Suno Audio Stream Proxy (CORS & Web Audio Analyser Desteği)
+  app.get("/api/suno/proxy-audio", async (req, res) => {
+    try {
+      const audioUrlParam = req.query.url as string;
+      const trackId = req.query.id as string;
+
+      let targetUrl = audioUrlParam;
+      if (!targetUrl && trackId) {
+        targetUrl = `https://cdn1.suno.ai/${trackId}.mp3`;
+      }
+
+      if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+        return res.status(400).send("Geçerli bir audio url gereklidir.");
+      }
+
+      // Suno CDN'den audio stream çek
+      const audioRes = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Range": req.headers.range || "bytes=0-"
+        }
+      });
+
+      if (!audioRes.ok && audioRes.status !== 206) {
+        return res.status(audioRes.status).send(`Suno Audio CDN hatası: ${audioRes.statusText}`);
+      }
+
+      // Response headers (CORS ve Web Audio için tam yetki)
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Range, Origin, Content-Type, Accept");
+      res.setHeader("Content-Type", audioRes.headers.get("content-type") || "audio/mpeg");
+      
+      const contentLength = audioRes.headers.get("content-length");
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+      
+      const contentRange = audioRes.headers.get("content-range");
+      if (contentRange) {
+        res.status(206);
+        res.setHeader("Content-Range", contentRange);
+      }
+      res.setHeader("Accept-Ranges", "bytes");
+
+      if (audioRes.body) {
+        // Node 18+ Web Streams to Node Stream piping
+        const { Readable } = await import("stream");
+        const nodeStream = Readable.fromWeb(audioRes.body as any);
+        nodeStream.pipe(res);
+      } else {
+        const arrayBuf = await audioRes.arrayBuffer();
+        res.send(Buffer.from(arrayBuf));
+      }
+    } catch (error: any) {
+      console.error("Suno proxy audio error:", error);
+      res.status(500).send("Audio proxy hatası");
+    }
+  });
+
   // API Route for health
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { VisualizerSettings, AudioEvents } from '../src/types';
 import { StudioRenderer } from '../src/core/Renderer';
+import { OfflineAudioProcessor } from '../src/core/AudioAnalysisEngine';
 
 export interface RenderJob {
   id: string;
@@ -333,70 +334,15 @@ async function processRenderJob(jobId: string, payload: StartRenderPayload) {
 
     // 7. Her Frame İçin Audio Analizi ve Canvas Çizim Döngüsü
     let currentFrame = 0;
-    const windowSize = 2048;
+    const offlineProcessor = new OfflineAudioProcessor(sampleRate);
 
     const renderNextFrames = async () => {
       while (currentFrame < totalFrames && !isCancelled) {
         const t = currentFrame / fps;
         const centerSample = Math.floor(t * sampleRate);
 
-        // PCM Sample Penceresinden Enerji ve Frekans Çıkarımı
-        let sumSq = 0;
-        let bassSq = 0;
-        let midSq = 0;
-        let highSq = 0;
-        const spectrumBins = new Array(64).fill(0);
-
-        for (let i = 0; i < windowSize; i++) {
-          const sampleIdx = centerSample + i - Math.floor(windowSize / 2);
-          const raw = pcmSamples[sampleIdx] || 0;
-          const val = raw / 32768;
-          const valSq = val * val;
-          sumSq += valSq;
-
-          // Frekans bantları
-          if (i < windowSize * 0.15) {
-            bassSq += valSq;
-          } else if (i < windowSize * 0.55) {
-            midSq += valSq;
-          } else {
-            highSq += valSq;
-          }
-
-          // 64 Bant Dağılımı
-          const binIdx = Math.floor((i / windowSize) * 64);
-          spectrumBins[binIdx] += Math.abs(val);
-        }
-
-        const energy = Math.min(1.0, Math.sqrt(sumSq / windowSize) * 3.5);
-        const bassEnergy = Math.min(1.0, Math.sqrt(bassSq / (windowSize * 0.15)) * 4.0);
-        const midEnergy = Math.min(1.0, Math.sqrt(midSq / (windowSize * 0.4)) * 3.5);
-        const highEnergy = Math.min(1.0, Math.sqrt(highSq / (windowSize * 0.45)) * 4.5);
-
-        const kick = bassEnergy;
-        const snare = midEnergy;
-        const hihat = highEnergy;
-        const beat = kick > 0.45 || (energy > 0.4 && kick > 0.35);
-
-        const normalizedSpectrum = spectrumBins.map((b) =>
-          Math.min(1.0, Math.max(0.04, (b / (windowSize / 64)) * 3.0))
-        );
-
-        const audioEvents: AudioEvents = {
-          kick,
-          snare,
-          hihat,
-          energy,
-          bassEnergy,
-          midEnergy,
-          highEnergy,
-          trebleEnergy: highEnergy,
-          spectrum: normalizedSpectrum,
-          time: t,
-          beat,
-          isSilence: energy < 0.01,
-          delta: 1 / fps
-        };
+        // Gerçek FFT ve Adaptif Beat Analizi ile AudioEvents üret
+        const audioEvents = offlineProcessor.processFrame(pcmSamples, centerSample, t, 1 / fps);
 
         // Stüdyo motorunu bu kare için çalıştır
         renderer.render(audioEvents, payload.settings);

@@ -15,6 +15,324 @@
 
 ## 🕒 2. İlerleme Logu & Değişiklik Geçmişi (Progress & Change Log)
 
+### [2026-08-10 - Oturum 48] - DSP Unified Extraction & Automated Test Infrastructure Setup
+
+**Çalışan Ajan Pipeline:** Lead Developer, Audio/DSP Specialist & QA Engineer
+
+- **Kullanıcı Talebi & Hedef:**
+  - `TESTING.md` içerisinde yer alan test felsefesi ile kod tabanı arasındaki boşluğu doldurmak.
+  - `package.json` dosyasına gerçek, otomatik olarak çalıştırılabilir bir test altyapısı entegre etmek.
+  - İstemci (`AudioProcessor.ts`) ve Sunucu (`renderEngine.ts`) taraflarındaki frekans ve beat analizi farklarını gidererek her iki katmanda da Cooley-Tukey Radix-2 FFT ve adaptif beat tespiti kullanarak "gördüğün şeyi aynen render edersin" ilkesini sağlamak.
+- **Uygulanan Mimari & Kod Çözümleri:**
+  1. **Ortak DSP Motoru (`src/core/AudioAnalysisEngine.ts`)**:
+     - **FastFourierTransform**: Saf TypeScript ile yazılmış, Hann pencereli, sıfır GC (zero allocation) ile çalışan Radix-2 Cooley-Tukey FFT algoritması.
+     - **AudioAnalysisCore**: Frekans bantlarını (Kick, Snare, Hi-hat, Vocal) normalize edip sönümleyen ve 30 frame rolling average tabanlı adaptif dinamik vuruş tespiti yapan ortak analizci.
+     - **OfflineAudioProcessor**: Çevrimdışı (sunucu/render) ortamlarda PCM tamponlarından 60 FPS kare kare analiz yapan sarmalayıcı.
+  2. **Sunucu ve İstemci Güncellemeleri**:
+     - `server/renderEngine.ts` içerisindeki eski sahte spektrum ve sabit vuruş tespiti mantığı kaldırılarak `OfflineAudioProcessor` entegrasyonu tamamlandı.
+     - `AudioProcessor.ts` içerisindeki analiz mantığı, ortak `AudioAnalysisCore` sınıfını kullanacak şekilde basitleştirildi ve refaktör edildi.
+  3. **Otomatik Test Altyapısı (`tests/runTests.ts`)**:
+     - Projenin en kritik analiz ve motor yapılarını test eden kapsamlı, hızlı bir test paketi yazıldı.
+     - 100Hz Sub-bass ve 8000Hz Treble frekans izolasyon testleri, adaptif vuruş tespiti, sessizlik tespiti, profil temizleme ve Suno link ayıklama testleri eklendi.
+     - `package.json` içerisine `"test": "tsx tests/runTests.ts"` scripti tanımlandı.
+- **Derleme, Doğrulama & Test Sonuçları:**
+  - `npm run test` komutu çalıştırılarak tüm 8/8 test adımı başarıyla yeşil tamamlandı.
+  - `npm run build` ve `npm run lint` işlemleri sorunsuz geçildi.
+
+### [2026-08-10 - Oturum 47] - AudioEngine Centralization Refactor (Single Source of Truth)
+
+**Çalışan Ajan Pipeline:** Lead Developer & Audio Architecture Specialist
+
+- **Kullanıcı Talebi & Hedef:**
+  - `AudioEngine` altında ses mimarisini tek merkezden yönetmek:
+    ```
+    AudioEngine
+     ├── AudioContext
+     ├── MediaSource
+     ├── Analyser (Main & Vocal Filtered)
+     ├── Master Chain (DSP & Presets)
+     ├── Export Chain (MediaStreamDestination)
+     └── Playback (Play/Pause, Seek, Mute, Observable State)
+    ```
+  - Öncesinde dağınık olan `App.tsx`, `MasteringEngine.ts` ve `VisualizerCanvas.tsx` içerisindeki ses bağlamı ve olay manipülasyonlarını tek bir `AudioEngine` singleton kontrolcüsünde toplamak.
+- **Uygulanan Mimari & Kod Çözümleri:**
+  1. **Merkezi Ses Motoru (`src/core/AudioEngine.ts`)**:
+     - `AudioContext` tembel başlatma (lazy initialization) ve kullanıcı etkileşimi güvenliği.
+     - Tek `MediaElementSourceNode` yönetimi (`attachAudioElement`, `loadTrack`, `unloadTrack`).
+     - `Main Analyser` (1024 FFT, 0.8 smoothing) ve `Vocal Analyser` (Bandpass 1750Hz, Q=0.7) entegrasyonu.
+     - Tam mastering zinciri (LowShelf, MidPeaking, HighShelf, WaveShaper Saturation, DynamicsCompressor, MasterGain).
+     - İstemci kaydı için `MediaStreamDestination` bağlantısı ve `getAudioStreamTrack()` desteği.
+     - Reaktif abonelik sistemi (`subscribe`) ile UI ve bileşenlerin tek merkezden senkronize edilmesi.
+  2. **Bileşen Entegrasyonları (`src/App.tsx`, `src/components/VisualizerCanvas.tsx`, `src/core/AudioProcessor.ts`)**:
+     - `App.tsx`: Dağınık `AudioContext` ve `source.connect` efektleri temizlendi; `audioEngine.subscribe` ile tüm oynatıcı durumları bağlandı. Slider, butonlar ve klavye kısayolları doğrudan `audioEngine.seek`, `audioEngine.seekRelative`, `audioEngine.togglePlay` ve `audioEngine.toggleMute` çağrılarına bağlandı.
+     - `VisualizerCanvas.tsx`: Kayıt başlangıcında ses parçası doğrudan `audioEngine.getAudioStreamTrack()` üzerinden alındı; oynatma tetikleyicileri `audioEngine` ile senkronize edildi.
+     - `AudioProcessor.ts`: `createEmptyAudioEvents` statik metodu ve `getAudioEvents` yardımcı fonksiyonu eklenerek tip güvenliği %100 sağlandı.
+- **Derleme & Doğrulama:** `npx tsc --noEmit` ve `npm run build` %100 hatasız yeşil tamamlandı.
+
+**Çalışan Ajan Pipeline:** Lead Developer & Audio Integration Architect
+
+- **Kullanıcı Talebi & Hedef:**
+  - Kullanıcı Suno şarkı linki verdiğinde (örn: `https://suno.com/s/a2hf69thdnYq25lG` veya `https://suno.com/song/...`) mevcut upload pipeline yerine alternatif bir veri sağlayıcı (Data Provider) katmanı olarak çalışması.
+  - Mevcut audio player, lip sync motoru, `VisemeEngine`, `PhonemeAlignmentEngine` ve 3D VRM avatar pipeline'ı kesinlikle bozulmadan korunmalı.
+  - Suno URL doğrulama, sayfa/API içeriğinden metadata analiz etme (`title`, `artist`, `image`, `audioUrl`, `lyrics`, `source: "suno"`).
+  - Word-level timestamp veya alignment verisi varsa `lyricsTimeline` formatına dönüştürüp `PhonemeAlignmentEngine` ile zenginleştirme; yoksa mevcut LRC parser / WhisperX fallback / otomatik süre dağıtımı ile kesintisiz çalışma.
+  - Arayüzde hem Header, hem Medya Sekmesi hem de LyricsStudio içerisinde tek tıkla Suno içe aktarma desteği.
+- **Uygulanan Mimari & Kod Çözümleri:**
+  1. **Sunucu Tarafı API (`server.ts`)**:
+     - `POST /api/suno/inspect`: Suno linklerini (kısa link `/s/`, `/song/`, `/clip/` veya UUID) çözümleyen, yönlendirmeleri izleyen, HTML OpenGraph / JSON-LD ve Suno Public API üzerinden şarkı adı, sanatçı, kapak görseli, ses URL'i ve word-level alignment verilerini çeken güvenli sunucu endpoint'i.
+     - `GET /api/suno/proxy-audio`: Web Audio API ve Canvas görselleştiricilerinde CORS kısıtlamalarını aşarak Suno ses akışını (stream ve Blob) sunan güvenli proxy endpoint'i.
+  2. **Veri Modelleri (`src/types.ts`)**:
+     - `SunoTimelineWord`, `SunoWordTimestamp`, `TrackMetadata` ve `NormalizedSunoTrack` interface'leri tanımlandı.
+  3. **Servis Katmanı (`src/services/SunoImporterService.ts`)**:
+     - `validateUrl()`, `extractTrackId()`, `importTrack()`, `fetchAudioBlob()`, `normalizeSunoData()`, `parseAlignmentAndLyrics()`, `groupWordsIntoLines()` ve `cleanSunoLyricsPrompt()` fonksiyonları uygulandı.
+     - Kelime düzeyinde zamanlama varsa doğrudan `PhonemeAlignmentEngine.enrichLyricsWithPhonemes()` ile viseme bağlandı; yoksa LRC parser veya akıllı süre dağıtımı devreye girdi.
+  4. **Kullanıcı Arayüzü & Bileşenler (`src/components/SunoImporter.tsx`, `src/App.tsx`, `src/components/LyricsStudio.tsx`)**:
+     - `SunoImporter.tsx`: Modern brutalist tasarımda, canlı analiz durumu, örnek linkler, parça & lirik önizlemesi ve "Projeye Aktar & Oynat" butonuna sahip şık modal ve inline panel bileşeni.
+     - `App.tsx`: Header barda "⚡ SUNO İÇE AKTAR", Medya sekmesinde "⚡ SUNO LİNKİ İLE YÜKLE" butonu ve modal entegrasyonu.
+     - `LyricsStudio.tsx`: "⚡ 3. SUNO AI LİNKİNDEN ÇÖZÜMLE" alt sekmesi ile sözleri ve zamanlamaları anında içe aktarma yeteneği.
+- **Derleme & Doğrulama:** `npx tsc --noEmit` (`lint_applet`) ve `npm run build` (`compile_applet`) %100 başarılı.
+
+### [2026-08-10 - Oturum 45] - 3D Avatar 6-Layer Procedural Performance Architecture & Natural Singer Live Presence
+
+**Çalışan Ajan Pipeline:** Lead Developer & 3D Character Rigging & Animation Architect
+
+- **Kullanıcı Bildirimi & Görev Hedefi:**
+  - Avatarın sadece mekanik konuşuyor görünmesi değil, sahnede gerçek bir şarkıcı/performer gibi canlı, organik ve nefes alan bir performans sergilemesi.
+  - 6 bağımsız katmandan oluşan **Motion Layer Architecture** kurulması:
+    - Layer 1: Lip Sync & Occlusion (En yüksek öncelik)
+    - Layer 2: Facial Expressions (Kaşlar, tebessüm, dinlenme)
+    - Layer 3: Eye Tracking & Blinking (Gaze, sakkadlar, insan tipi göz kırpma)
+    - Layer 4: Breathing & Posture (8s nefes döngüsü, şarkı öncesi nefes alma, göğüs/omuz)
+    - Layer 5: Body Idle & Performance (Müzik temposu kafa salınımı, ritim nod, rahat kol duruşu)
+    - Layer 6: Hair & Secondary Physics (Sönümlü yay atalet gecikmesi ve VRM spring bone)
+  - Mevcut VRM yükleme, iskelet rig, lip sync, LRC senkronizasyonu ve oynatıcı sistemlerinin sıfır bozulmayla korunması.
+- **Kök Neden & Mimari Analiz:**
+  1. **Açık Ağız Problemi**: `PhonemeAlignmentEngine.ts` içinde LRC senkronizasyonunda o anda aktif kelime olmadığında (intro veya kelimeler arası enstrümantal bölümler), `Senaryo C` devreye girip enstrümantal müzik frekanslarını (gitar, synth) vokal sanarak `A` veya `U` viseme kodu döndürüyordu.
+  2. **Statik/Donuk Duruş**: Avatarın nefes alma, insan benzeri göz kırpma (çift göz kırpma olasılığı, yumuşak s-curve kapanma/açılma), kafa mikro yaw/pitch/roll salınımları ve ikincil saç ataleti için bağımsız bir katman bulunmuyordu.
+- **Uygulanan Çözümler & Yeni Modüller:**
+  1. **`src/core/IdleAnimationEngine.ts` (6-Layer Procedural Performance Engine)**:
+     - **4 Performance State**: `BEFORE_PLAYBACK`, `INSTRUMENTAL`, `VOCAL`, `HIGH_ENERGY`.
+     - **Layer 1**: Lip sync durumuyla entegre REST kontrolü ve pre-vocal şarkı başlangıç takibi.
+     - **Layer 2 (Facial Expressions)**: Vokal enerjisinde hafif kaş yükselmesi (`browInnerUp`), yüksek enerjide mikro-tebessüm (`happy`), dinlenmede gevşeme (`relaxed`).
+     - **Layer 3 (Eye Tracking & Human Blinking)**: 3.0 - 7.0 sn rastgele insan kırpma aralığı (vokal sırasında odak için 5.0 - 8.0 sn), %20 çift kırpma şansı, aşırı açık ağızda kırpma baskılama, mikro-sakkadlar (2.2 - 5.0 sn) ve derin müzikal anlarda düşünceli içe bakış (introspective glance).
+     - **Layer 4 (Breathing & Posture)**: 8 saniyelik doğal döngü (4s alma, 4s verme), şarkı başlamadan önce 400ms'lik nefes alma refleksi (pre-vocal inhale anticipation), göğüs genişlemesi ve omuz yükselmesi.
+     - **Layer 5 (Body Idle & Performance)**: Müzik temposuna bağlı 0.2° - 1.5° kafa mikro-salınımı, kick/bass ritim binişi, rahat müzisyen kol dinlenme duruşu.
+     - **Layer 6 (Hair & Secondary Physics)**: Kafa açısal hızından türetilen 2. derece sönümlü yay ataleti (damped spring oscillator).
+  2. **`src/types.ts`**:
+     - `PerformanceLayerConfig` arayüzü eklendi; her katman bağımsız olarak açılıp kapatılabilir (`layer1LipSyncEnabled`, `layer2FacialExpressionEnabled`, `layer3EyeTrackingEnabled`, `layer4BreathingEnabled`, `layer5BodyIdleEnabled`, `layer6HairPhysicsEnabled`).
+  3. **`src/core/TalkingHead.ts`**:
+     - 6 katmanlı performans motoru iskelet kuaterniyonları ve blendshapeleri ile tam uyumlu hale getirildi.
+  4. **`src/core/PhonemeAlignmentEngine.ts` & `VisemeEngine.ts`**:
+     - Enstrümantal ve intro bölümlerinde kesin `REST` pozuna geçiş ve 55ms pürüzsüz ağız kapanma sönümlemesi uygulandı (`Rest Lock`).
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 başarılı.
+
+### [2026-08-10 - Oturum 44] - VRM Upper/Lower Arm Skeletal Rest Pose Calibration Fix
+
+**Çalışan Ajan Pipeline:** Lead Developer & 3D Skeletal Rigging Architect
+
+- **Kullanıcı Bildirimi & Sorun Tespiti:**
+  - 3D VRM modelinin kollarının T-pose'dan gövde yanına inmek yerine yukarı doğru havaya kalkması (`leftUpperArm` ve `rightUpperArm` açılarının ters eksende olması).
+- **Kök Neden:**
+  - `@pixiv/three-vrm` normalize edilmiş humanoid kemik koordinat sisteminde sol kol (+X) için pozitif Z rotasyonu kolu aşağı indirirken, önceki kodda `-1.40` radyan verilmişti (bu da kolu T-pose'dan +80 derece yukarı havaya kaldırıyordu). Sağ kol (-X) için ise `+1.40` radyan ters yönde uygulanmıştı.
+- **Uygulanan Çözümler:**
+  - `src/core/TalkingHead.ts`:
+    - `leftUpperArm`: `q.setFromEuler(0.10, -0.05, 1.35)` ile gövdenin sol yanına doğal şekilde indirildi.
+    - `rightUpperArm`: `q.setFromEuler(0.10, 0.05, -1.35)` ile gövdenin sağ yanına doğal şekilde indirildi.
+    - `leftLowerArm` / `rightLowerArm` ve `leftShoulder` / `rightShoulder` açıları dirseklerin içe ve öne hafif bükülü doğal dinlenme duruşuna ayarlandı.
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 başarılı.
+
+### [2026-08-10 - Oturum 43] - VRM Visualizer Background Image Fix & Glitch Flicker / Red Lines Elimination
+
+**Çalışan Ajan Pipeline:** Lead Developer & 3D/2D Canvas Rendering Architect
+
+- **Kullanıcı Bildirimi & Sorun Tespiti:**
+  - VRM görselleştirici seçildiğinde ekranın yanıp sönmesi ve ekranda kırmızı çizgilerin belirmesi.
+  - Arka plan görseli seçildiğinde (küratörlü veya özel yüklenen duvar kağıtları) VRM modunda hiçbir şekilde arka planda görünmemesi.
+- **Kök Neden Analizi:**
+  1. **Arka Planın Kaybolması**: `src/visualizers/VrmAnimeHybridVisualizer.ts` içerisindeki `render` fonksiyonu, Three.js sahnesini şeffaf (`alpha: true`) olarak çizdikten hemen sonra `ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, width, height);` çağrısıyla tüm 2D Canvas'ı opak bir renkle dolduruyor; bu da `StudioRenderer` tarafından çizilen arka plan görselini (`drawImageBackground`) ve videosunu tamamen siliyordu.
+  2. **Yanıp Sönme ve Kırmızı Çizgiler**: Yine `VrmAnimeHybridVisualizer.ts` içinde tiz frekans (`treble > 0.75`) piklerinde çalışan agresif `getImageData` piksel dilimleme ve `ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; ctx.fillRect(0, y, width, sliceHeight);` kodları ekranda kırmızı yatay bantlar ve şiddetli titremelere yol açıyordu. Ayrıca bas piklerinde göz çevresine neon pembe kutu ve vokal dalga formu çiziliyordu.
+  3. **Varsayılan Avatar Modu**: `src/App.tsx` içinde varsayılan `avatarMode` değeri `hologram` olarak ayarlandığı için RGB ayrışması ve CRT tarama çizgileri otomatik olarak devreye giriyordu.
+- **Uygulanan Çözümler:**
+  1. `src/visualizers/VrmAnimeHybridVisualizer.ts`:
+     - Opak `ctx.fillRect(0, 0, width, height)` çağrısı kaldırıldı. Three.js WebGL canvas'ı şeffaf arka planla doğrudan 2D Canvas üzerine bindirilerek kullanıcının seçtiği duvar kağıtlarının/videolarının 3D avatar arkasında pürüzsüzce görünmesi sağlandı.
+     - Tiz frekanslarındaki kontrolsüz kırmızı bant çizimleri (`rgba(255, 0, 0, 0.5)`), bas kutuları ve titreten piksel kaydırmaları tamamen temizlendi.
+     - `SOLID ANIME` modu yüksek çözünürlüklü, net ve temiz 3D render sağlayacak şekilde optimize edildi; `HOLOGRAM 3D` modu ise estetik, yumuşak bir ışık halesi (`screen` blending) ile dengelendi.
+  2. `src/App.tsx`:
+     - Varsayılan `avatarMode` değeri `'anime'` olarak ayarlandı.
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 başarılı.
+
+### [2026-08-10 - Oturum 42] - 5-Stage Acoustic Forced Alignment, Formant VAD & Phoneme Timeline Engine
+
+**Çalışan Ajan Pipeline:** Lead Developer & DSP / Phonetic Speech Animation Architect
+
+- **Kullanıcı Talebi & Kod İncelemesi:**
+  - `VisemeEngine.ts`, `AudioProcessor.ts` ve `lyricSyncService.ts` dosyalarının akustik analiz derinliğini doğrulamak;
+  - LRC tabanlı yaklaşık dudak hareketinden, ses tabanlı gerçek fonem zamanlamasına (Forced Alignment) geçmek:
+    `Audio -> Voice Activity Detection (VAD) -> Phoneme Alignment -> Viseme Mapping -> Blendshape Animation`
+  - Vowel sustain detection (sesli harf uzatmalarında erken kapanmayı önleme) eklemek;
+  - Bilabial phoneme detection (M, B, P) için gerçek kapanma (`lip_press: 1`, `mouth_open: 0`, `jaw_drop: 0`) kurallarını sadece duyulduğu anda uygulamak;
+  - Coarticulation ve 50-100ms enterpolasyon ile yumuşak viseme geçişleri sağlamak;
+  - Başlangıçta ve sessizlikte REST pozunu garantiye almak.
+- **Uygulanan Mimari & Kod Çözümleri:**
+  1. **`src/core/PhonemeAlignmentEngine.ts`**:
+     - **Phoneme Timeline**: Her kelime için akustik süre ağırlıkları (`weight`) ve minimum artikülasyon süreleri ile alt fonem çizelgesi (`PhonemeToken[]`: `relativeStart`, `relativeEnd`, `startTime`, `endTime`, `isVowelNucleus`) üretimi.
+     - **Akustik Spektral Analiz & Formant Takip**: 64-kanallı FFT'den F1 (300-1000Hz çene açıklığı), F2 (1000-2800Hz yayvanlık), Fricative (3500-8000Hz S/Ş/F sürtünmesi) formant bölgelerini ve dinamik gürültü tabanlı VAD (Voice Activity Detection) tespiti.
+     - **Vowel Sustain Tracker**: Kelime zaman damgası bitse dahi vokal enerjisi devam ediyorsa (`vocalRMS`, `vocalEnergy`, `isVocalPresent`), sesli harf çekirdeğini (`sustainedVowel`) koruyarak erken kapanmayı önleyen mekanizma.
+  2. **`src/core/VisemeEngine.ts`**:
+     - 5-Kademeli işlem hattı: `VAD & Formant Extraction -> Forced Alignment -> Coarticulation Interpolation -> Bilabial Occlusion -> Asymmetric Exponential Smoothing (Attack: 45ms, Release: 100ms)`.
+     - `M`, `B`, `P` için mutlak çift dudak kapanışı (`mouth_open = 0`, `jaw_drop = 0`, `lip_press = 1`).
+     - Şarkı başında ve vokal yokken kesin `REST` pozu.
+  3. **`src/services/lyricSyncService.ts` & `src/types.ts`**:
+     - `SyncedWord` ve `PhonemeToken` tipleri ile `enrichLyricsWithPhonemes` entegrasyonu. LRC artık fallback ve yaklaşık kelime kılavuzu olarak görev yapar.
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 yeşil, tüm VRM animasyonları ve mevcut bileşenler korundu.
+
+### [2026-08-10 - Oturum 41] - 5-Stage Layered Skeletal Calibration & Quaternion Animation Transform Pipeline
+
+**Çalışan Ajan Pipeline:** Lead Developer & 3D Skeletal Rigging / VRM Kinematics Architect
+
+- **Kullanıcı Talebi:**
+  - Doğrudan kemik rotasyonu (`leftUpperArm.rotation.set(...)`) verilmesinin modelden modele bozulmalara ve VRM animasyon/humanoid sistemiyle üst üste binme çakışmalarına neden olduğunu belirterek;
+  - Sistematik 5 aşamalı mimariyi kurmak:
+    `Avatar Load -> Skeleton Calibration -> Rest Pose Offset -> Animation Layer -> Final Bone Transform`
+- **Uygulanan Çözümler:**
+  - **Aşama 1: Avatar Load**: Model GLTF/VRMLoader ile sahneye yüklendiğinde `TalkingHead(vrm)` örneği başlatılır.
+  - **Aşama 2: Skeleton Calibration (`calibrateSkeleton`)**:
+    - Tüm humanoid kemik düğümleri (`hips`, `spine`, `chest`, `neck`, `head`, `leftShoulder`, `rightShoulder`, `leftUpperArm`, `rightUpperArm`, `leftLowerArm`, `rightLowerArm`, `leftHand`, `rightHand`) taranır.
+    - Modelin orijinal bind-pose kuaterniyonları (`initialQuaternion`), pozisyon ve ölçek referansları `Map<HumanoidBoneKey, BoneCalibration>` yapısında kaydedilir.
+  - **Aşama 3: Rest Pose Offset (`calculateRestPoseOffsetForBone`)**:
+    - T-Pose / A-Pose başlangıç duruşunu organik dinlenme duruşuna dönüştüren kemik bazlı kanonik göreceli kuaterniyon ofsetleri (`restOffsetQuaternion`) tanımlanır.
+  - **Aşama 4: Animation Layer**:
+    - Şarkı söylerken baş onayı (vocal nodding), nefes alma mikro-salınımları, ritmik omurga kinematiği ve kol salınımı dinamik göreceli kuaterniyon olarak (`tempAnimQ`) üretilir.
+    - Dudak hareketleri (Bilabial occlusion korumalı visemeler) ve doğal göz kırpma blendshape katmanında işlenir.
+  - **Aşama 5: Final Bone Transform (`applyLayeredBoneTransform`)**:
+    - Her kemik için bileşik dönüşüm formülü uygulanır:
+      $$Q_{final} = Q_{calibrated} \times Q_{restOffset} \times Q_{anim}$$
+    - Kuaterniyon çarpımı ile açı birikmesi (drift) ve gimbal lock tamamen engellenir, VRM iç güncellemesi (`vrm.update(1/60)`) ile tam uyumlu çalışır.
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 40] - Default Local Demo Asset Integration (MESELE.flac & MESELE.txt)
+
+**Çalışan Ajan Pipeline:** Lead Developer & Media Asset Integration Architect
+
+- **Kullanıcı Talebi:** `/public/demo-items` yoluna eklenen `MESELE.flac` ve `MESELE.txt` dosyalarını uygulamanın varsayılan demo müziği ve senkronize lirik (LRC) içeriği olarak kullanmak; böylece her testte tekrar tekrar dosya yükleme zahmetini ortadan kaldırmak.
+- **Uygulanan Çözümler:**
+  - **LRC Servisi Entegrasyonu (`lyricSyncService.ts`)**:
+    - `MESELE_DEMO_LRC_TEXT` ve `getMeseleDemoSyncedLyrics()` yardımcı fonksiyonu eklendi; `MESELE.txt` içeriği zaman damgalı satır ve kelimeleriyle tam fonetik ayrıştırma için hazır hale getirildi.
+  - **Uygulama Başlangıç & Demo Yapılandırması (`App.tsx`)**:
+    - Varsayılan ses dosyası `/demo-items/MESELE.flac`, parça başlığı `'Mesele'`, sanatçı adı `'Demo'` ve senkronize lirikler `getMeseleDemoSyncedLyrics()` olarak ayarlandı.
+    - Uygulama ilk açıldığında arka planda `fetch('/demo-items/MESELE.flac')` ile ses dosyası `Blob` olarak önbelleğe alınarak FFmpeg ve yerel render motoruna anında hazır hale getirildi.
+    - Top bar ve Medya sekmesindeki `loadDemoTrack()` fonksiyonu Mesele parçası ve LRC'sini anında yeniden yükleyecek şekilde güncellendi.
+  - **Lirik Stüdyosu Güncellemesi (`LyricsStudio.tsx`)**:
+    - Varsayılan metin ve LRC alanları `MESELE.txt` içeriğiyle senkronize edildi; tek tıkla "Mesele Demo LRC'yi Uygula" butonu eklendi.
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 39] - Acoustic Waveform / RMS Energy-Driven Lip Sync & Adaptive Phoneme Sustain Engine
+
+**Çalışan Ajan Pipeline:** Lead Developer & DSP / Vocal Synthesis Architect
+
+- **Kullanıcı Talebi:** Mevcut LRC kelime süre tahminindeki erken REST pozisyonuna geçme sorununu çözmek; LRC'yi sadece başlangıç referansı olarak kullanıp kelime bitişlerini audio waveform/RMS enerji analizi ile tespit ederek, ses devam ettiği sürece viseme animasyonunu sürdürmek ve vokal enerjisi düştüğünde 100-150ms smoothing ile REST pozisyonuna geçmek.
+- **Uygulanan Çözümler:**
+  - **Waveform RMS & Vocal Energy Pipeline (`AudioProcessor.ts`, `src/types.ts`)**:
+    - `analyser.getByteTimeDomainData()` ile gerçek zamanlı fiziksel ses basıncı RMS genliği (`vocalRMS`) hesaplandı.
+    - 300Hz-3400Hz vokal formant bandı (F1/F2) ile RMS gücü birleştirilerek anlık vokal varlığı tespit edildi.
+  - **Vokal Performans Tabanlı Viseme Motoru (`VisemeEngine.ts`)**:
+    - **LRC Sadece Başlangıç Referansı (Start Trigger)**: LRC zaman damgaları artık yapay bitiş süreleri dayatmıyor. Zaman kelimenin başlangıcına ulaştığında fonetik sıralama tetikleniyor.
+    - **Sürdürülen Vokal / Sesli Harf Fonem Kilidi (Phoneme Sustain)**: Başlangıç ünsüzleri doğal akustik süreyle (~85ms) geçildikten sonra kelimenin ana sesli harfi vokal enerjisi devam ettiği sürece açık tutuluyor (uzun notalar, solo şarkı kısımları vb.).
+    - **Akustik Enerji Bitiş Tespiti & REST Geçişi**: `vocalRaw` (RMS + Vocal Formant) enerjisi eşik altına düştüğünde ve 80ms vibrato koruma penceresi dolduğunda vokal bitişi anında algılanıp hedef `REST` olarak belirleniyor.
+    - **100-150ms Organik Yumuşatma (Exponential Smoothing Filter)**: Attack süresi 85ms (hızlı ve ritmik şarkı girişi), Decay/Release süresi 125ms (tam 100-150ms aralığında esnek ve doğal ağız kapanışı) olarak yapılandırıldı.
+    - **Vokal Gücü Modülasyonu**: Şarkıcının ses şiddetine (belting / soft singing) göre ağız dikey açıklığı (`mouth_open`, `jaw_drop`) dinamik olarak ölçekleniyor.
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 38] - Lowered Relaxed Arms Kinematics & Dynamic Head Hero Framing (16:9, 1:1, 9:16)
+
+**Çalışan Ajan Pipeline:** Lead Developer & 3D Kinematics Architect
+
+- **Kullanıcı Talebi:** VRM 3D modelinde kolları tamamen aşağı indirmek ve 16:9, 9:16, 1:1 modlarının tamamında ana materyal olarak kafaya (close-up portrait / headshot) odaklanmak.
+- **Uygulanan Çözümler:**
+  - **Doğal Rahat Kol Duruşu (Lowered Arms Kinematics)** (`TalkingHead.ts` & `VrmAnimeHybridVisualizer.ts`):
+    - T-Pose / açık A-pose kolları gövde yanına tamamen indirildi (`leftUpperArm`: `Z: -1.35 rad ~ -77°`, `X: 0.08`, `Y: 0.04`; `rightUpperArm`: `Z: +1.35 rad`, `X: 0.08`, `Y: -0.04`).
+    - Dirsekler (`lowerArm`) ve bilekler (`hand`) doğal bir rahatlama açısıyla gövde hizasına yerleştirildi.
+    - `TalkingHead.update()` içerisinde her karede (frame) hafif nefes alma ve ritim salınımı ile kolların gövde yanında stabil kalması sağlandı.
+  - **Dinamik Kafa Odaklı Kamera Kadrajlama (Head Hero Framing)** (`VrmAnimeHybridVisualizer.ts`):
+    - `updateCameraFraming(aspect)` metodu geliştirildi.
+    - Modelin baş kemiği (`head`) dünya koordinatları (`baseHeadPos`) baz alınarak:
+      - **16:9 (Geniş Ekran / Sinematik)**: 32° FOV, ~0.48m mesafe ile kafayı tam merkeze alan yakın plan (bust shot).
+      - **1:1 (Kare Avatar / Kapak)**: 34° FOV, ~0.52m mesafe ile baş ve yaka hizasını mükemmel kare kadraja alan profil portresi.
+      - **9:16 (Dikey / Reels / TikTok / Shorts)**: 35° FOV ve en-boy oranına göre dinamik mesafe çarpanı (`distance = 0.50 * 0.85 / aspect`) ile saçların ve başın yanlardan kesilmesini tamamen önleyen, kafayı ekranın üst-orta altın oranına oturtan kadrajlama.
+- **Derleme & Doğrulama:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 37] - Dynamic 3D VRM Model Selection & Custom Avatar Upload Engine
+
+**Çalışan Ajan Pipeline:** Lead Developer & UI/UX Architect
+
+- **Amaç:** Kullanıcının dosya gezgini ile yüklediği `Nutachisan.vrm` ve diğer özel `.vrm` modellerini stüdyo arayüzünden anında seçilebilir ve yüklenebilir hale getirmek.
+- **Çözüm:**
+  - **Dinamik Model Yükleme Altyapısı (`VrmAnimeHybridVisualizer.ts`)**:
+    - `loadVRM(modelUrl)` fonksiyonu parametrik hale getirildi. Model değiştiğinde eski Three.js sahne nesneleri ve `TalkingHead` bağlamı güvenle temizlenip yeni VRM modeli (49 kemik, blendshape setleri) GPU belleğine yükleniyor.
+    - Farklı boy ve oranlardaki avatarlar için kafa kemiği (`head`) ve sınırlayıcı kutu (`Box3`) bazlı otomatik kamera kadrajlama (auto-focus framing) entegre edildi.
+  - **Tip Güvenliği (`src/types.ts`)**:
+    - `VisualizerSettings` arayüzüne `vrmModelUrl?: string` ve `vrmModelName?: string` alanları eklendi.
+  - **Görsel & Medya Arayüzü Entegrasyonu (`src/App.tsx`)**:
+    - **Görsel Sekmesi (`VRM_ANIME_HYBRID`)**: Alicia Solid (Standart) ve Nutachisan (Yüklenen Özel Model) hızlı seçim kartları, doğrudan bilgisayardan `.vrm` yükleme butonu ve manuel model yolu giriş alanı eklendi.
+    - **Medya Yönetimi Sekmesi**: Tüm medya varlıklarının yanında 3D VRM Avatar/Karakter modeli yönetim kartı eklendi.
+- **Derleme:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 36] - Anatomical Lip, Mouth Aperture & Blendshape Separation for OBJ Face Mask
+
+**Çalışan Ajan Pipeline:** Lead Developer & QA Tester
+
+- **Sorun:** OBJ Face Mask modelinde kaba koordinat kesimi (`vy < -20`) nedeniyle ağız yerine yanakların, elmacık kemiklerinin ve tüm alt yüzün genişleyip büzülmesi; üst ve alt dudakların ayrışmaması.
+- **Çözüm:**
+  - `ObjFaceVisualizer.ts` içerisinde model ayrıştırma (`parseObj`) aşamasında her tepe noktası için anatomik ağırlıklar (`upperLipWeight`, `lowerLipWeight`, `cornerWeight`, `jawWeight`, `mouthWeight`) hesaplandı.
+  - Ağız açıklığı (oral aperture) üst dudak (hafif yukarı) ve alt dudak (aşağı) hareketlerine ayrıştırıldı; yanaklar ve kafatası kemikleri sabitlendi.
+  - Dudak büzme (`lip_round`), gülümseme/genişleme (`mouth_width`) ve dudak sıkma (`lip_press`) blendshape'leri gerçekçi dudak geometrisine bağlandı.
+- **Derleme:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 35] - Fix LRC Viseme Timing & Lip-Sync REST Transition Architecture
+
+**Çalışan Ajan Pipeline:** Lead Developer & DSP Critic
+
+- **Sorun:** Kelime ve cümle bittikten sonra avatar ağzının açık veya son viseme pozisyonunda (örn: "seviyorum" sonrası) donup kalması.
+- **Çözüm:**
+  - **Dinamik End Timestamp & Kelime Ayrıştırma**: `VisemeEngine` içerisine eksik kelime bitişlerini sonraki kelime veya satır sınırına göre dinamik hesaplama eklendi; `lyricSyncService.ts` üzerinde kelime uzunluklarına göre ağırlıklı ve doğal süre dağıtımı sağlandı.
+  - **REST State Entegrasyonu**: Her kelimenin telaffuz süresinden sonra (son %20-25 / 80-150ms aralığında) ve kelime aralarındaki boşluklarda otomatik REST durumuna geçiş sağlandı.
+  - **80-150ms Exponential Damping (Smooth Interpolation)**: Delta-time (`dt`) duyarlı yumuşak sönümleme filtresi ile REST geçişinin ani/sert sıçrama olmadan 80-150ms bandında organik olarak tamamlanması sağlandı.
+  - **Cümle Bitişi Algılama (Phrase Completion)**: Son kelime tamamlandığında satır sonu otomatik algılanarak ağzın nötr ve kapalı pozisyona dönmesi garantilendi.
+  - **Doğal Vokal Mikro-Hareketleri**: Kelime ve cümle aralarında vokal/müzik enerjisine bağlı organik mikro-nefes ve dudak gerilimi hareketleri eklendi.
+- **Derleme:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 34] - Fix OBJ Face Mask Rotation Axis & Orientation
+
+**Çalışan Ajan Pipeline:** Lead Developer & QA Tester
+
+- **Sorun:** OBJ Face Mask modelinin (`face.obj`) ters/arka yöne bakması ve normal culling nedeniyle içe dönük görünmesi.
+- **Çözüm:**
+  - `ObjFaceVisualizer.ts` içerisindeki `parseObj` fonksiyonuna model ağırlık merkezi (center of mass) hesaplaması eklendi; dönme ekseni (pivot) tam kafa merkezine oturtuldu.
+  - Normal vektör hesaplamasındaki ters işaret (`-nz`) ve culling koşulu (`normalZ <= 0`) düzeltilerek 888 ön yüzey poligonunun doğrudan ekrana (kameraya) bakması sağlandı.
+- **Derleme:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 33] - Fix VRM Model Asset & Resilient GLTFLoader Pipeline
+
+**Çalışan Ajan Pipeline:** Lead Developer & QA Verifier
+
+- **Sorun:** `VRM Load Error: THREE.GLTFLoader: JSON content not found.` hatası. `public/models/AliciaSolid.vrm` dosyasının kısmi/kesilmiş (1.99MB) indirilmiş olması nedeniyle binary glTF chunk parsing aşamasında GLTFLoader JSON başlığını bulamıyordu.
+- **Çözüm:**
+  - `public/models/AliciaSolid.vrm` tam ve sağlam resmi VRM 0.51 ikili modeli (7.6MB) ile yenilendi.
+  - `VrmAnimeHybridVisualizer.ts` içerisine otomatik CDN fallback ve hata yakalama mekanizması eklendi.
+  - Model yüklenirken 2D/3D tuval üzerinde şık siberpunk holografik yükleme animasyonu ve durum geri bildirimi sağlandı.
+- **Derleme:** `tsc --noEmit` ve `npm run build` %100 yeşil.
+
+### [2026-08-10 - Oturum 32] - Viseme & Blendshape Lip-Sync Architecture
+
+**Çalışan Ajan Pipeline:** Lead Developer & UI/UX Critic
+
+- **Özellik / İyileştirme:** 
+  - NVIDIA Audio2Face ve Rhubarb Lip-Sync standartlarını temel alan 10 Visemeli (`REST`, `A`, `E`, `I`, `O`, `U`, `M`, `F`, `L`, `S`) fonetik dudak senkronizasyonu motoru (`src/core/VisemeEngine.ts`) geliştirildi.
+  - Kelime ve hece düzeyinde harfler fonetik visemelere ayrıştırıldı (Grapheme-to-Phoneme G2P). Şarkı sözünün zaman aralığı içerisinde harf sırasına göre blendshape geçişleri (lerp/damper) 60 FPS'de yumuşatıldı.
+  - `jaw_drop`, `mouth_open`, `mouth_width`, `lip_round`, `lip_press` parametreleri hem VRM 1.0 & VRM 0.0 blendshape morf modellerine (`TalkingHead.ts`), hem de prosedürel 3D mesh modellerine (`NoirSingingHeadVisualizer.ts`, `ObjFaceVisualizer.ts`) bağlandı.
+  - Şarkı sözü bulunmadığında veya satır aralarında dudak hareketleri otomatik olarak `REST` pozuna dönerek şarkı esnasında yapay ağız açıp kapama sorunu tamamen ortadan kaldırıldı.
+  - `LyricsStudio.tsx` üzerinde 10 Viseme aktifliğini gösteren bilgilendirici kontrol rozeti eklendi.
+
 ### [2026-08-10 - Oturum 31] - Effect Defaults & Lyrics Lip-Sync Logic
 
 **Çalışan Ajan Pipeline:** Lead Developer

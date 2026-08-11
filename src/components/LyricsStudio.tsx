@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { VisualizerSettings, LyricsStyle, LyricsPosition } from '../types';
-import { parseLrcText, exportToLrcText, autoSyncLyricsByDuration } from '../services/lyricSyncService';
+import { parseLrcText, exportToLrcText, autoSyncLyricsByDuration, MESELE_DEMO_LRC_TEXT } from '../services/lyricSyncService';
+import { sunoImporter } from '../services/SunoImporterService';
 import { 
   Type, Upload, Download, Plus, Trash2, Zap, Play, Clock, 
-  RotateCcw, Eye, EyeOff, Radio
+  RotateCcw, Eye, EyeOff, Radio, Link2, Sparkles, Loader2, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -16,10 +17,43 @@ interface LyricsStudioProps {
   onChange: (updated: Partial<VisualizerSettings>) => void;
 }
 
-const DEMO_LYRICS_TEXT = `Gecenin içinde kaybolan ışıklar
-Neon sokaklarda yankılanan sesler
-Zaman durur ama ritim devam eder
-Gözlerini kapat ve akışa bırak`;
+const DEMO_LYRICS_TEXT = `Geceler geçmiyo'
+Sabahlar bitmiyo'
+Nitekim dinmiyor, ağrı, sebebini bilmiyom
+Hızlıyım, sorunlarla soranlar incitmiyo'
+Kim diyor, evim? yakarım hiç bilmiyo'
+"Gezelim hadi gel, bin!" diyor
+Gidelim istiyor: "Zamanım var benim"
+Kısa kes! seni dinliyom:
+"Bir sigara daha yaktım
+Belki susar kafamdaki ses
+Yokluğun ayrı bela
+Varlığın ayrı bir nefes"
+Sorarsan ayaktayım da
+Yaşamak başka mesele
+Bazı günler ölmek değil
+Sabahlamak zor o mesele
+Sözüm şiirlerin mükemmelidir
+Senden başkasını seven delidir
+Yüzün çiçeklerin en güzelidir
+Gözlerin bilinmez bir diyar gibi
+Sokak lambaları yanık
+Yine gece mesaisindeyim
+Kaç gecedir aynı filmi
+Farklı kafayla seyretmekteyim
+Müslüm çalıyor uzaktan
+Şarkı ciğerime oturuyo'
+Bazı şarkılar var ya
+Adamın ömrünü çürütüyo'
+Çocukluğum kaldı bir yerde
+Bulsam alıp gelicem
+Bu yaştan sonra kimseye derdimi anlatam'icam
+Herkes kendi hesabında kendi derdinde
+Benim içimde kıyamet var kendi halimde
+Sözüm şiirlerin mükemmelidir
+Senden başkasını seven delidir
+Yüzün çiçeklerin en güzelidir
+Gözlerin bilinmez bir diyar gibi`;
 
 export const LyricsStudio: React.FC<LyricsStudioProps> = ({
   settings,
@@ -29,10 +63,16 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
   onTogglePlay,
   onChange
 }) => {
-  const [activeTab, setActiveTab] = useState<'AUTO' | 'LRC' | 'MANUAL'>('AUTO');
+  const [activeTab, setActiveTab] = useState<'AUTO' | 'LRC' | 'SUNO' | 'MANUAL'>('LRC');
   const [rawTextInput, setRawTextInput] = useState(DEMO_LYRICS_TEXT);
-  const [rawLrcInput, setRawLrcInput] = useState('');
+  const [rawLrcInput, setRawLrcInput] = useState(MESELE_DEMO_LRC_TEXT);
   const [liveTapIndex, setLiveTapIndex] = useState(0);
+
+  // Suno Link Çözümleme State'i
+  const [sunoUrlInput, setSunoUrlInput] = useState('https://suno.com/s/a2hf69thdnYq25lG');
+  const [isSunoLoading, setIsSunoLoading] = useState(false);
+  const [sunoError, setSunoError] = useState<string | null>(null);
+  const [sunoSuccessMessage, setSunoSuccessMessage] = useState<string | null>(null);
 
   // Klavye Space Tuşu ile Canlı Senkronizasyon desteği
   useEffect(() => {
@@ -99,6 +139,44 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
     link.download = `${settings.trackTitle || 'vidframer_lyrics'}.lrc`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  // 3.5 Suno AI Linkinden Lirik ve Senkronizasyon Çek
+  const handleFetchSunoLyrics = async () => {
+    const targetUrl = sunoUrlInput.trim();
+    if (!targetUrl) {
+      setSunoError("Lütfen geçerli bir Suno şarkı linki girin.");
+      return;
+    }
+
+    setSunoError(null);
+    setSunoSuccessMessage(null);
+    setIsSunoLoading(true);
+
+    try {
+      const track = await sunoImporter.importTrack(targetUrl);
+      if (track.syncedLines && track.syncedLines.length > 0) {
+        onChange({
+          syncedLyrics: track.syncedLines,
+          lyricsEnabled: true,
+          trackTitle: track.title || settings.trackTitle,
+          artistName: track.artist || settings.artistName
+        });
+        setSunoSuccessMessage(
+          `✓ "${track.title}" başarıyla yüklendi! (${track.syncedLines.length} satır, ${track.hasWordLevelTimestamps ? 'Kelime Düzeyi Senkron' : 'Otomatik Senkron'})`
+        );
+        setLiveTapIndex(0);
+      } else if (track.lyrics) {
+        setRawTextInput(track.lyrics);
+        setSunoSuccessMessage(`✓ Şarkı sözleri metin olarak alındı.`);
+      } else {
+        throw new Error("Şarkıya ait lirik bulunamadı.");
+      }
+    } catch (err: any) {
+      setSunoError(err?.message || "Suno lirikleri alınamadı.");
+    } finally {
+      setIsSunoLoading(false);
+    }
   };
 
   // 4. Canlı Tap / Dokunarak Zaman Damgası Mühürleme
@@ -294,19 +372,34 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
         </div>
       </div>
 
-      {/* 3. SENKRONİZASYON SEKMELERİ (AUTO / LRC / MANUAL) */}
+      {/* 2.5 VİSEME DİJİTAL DUDAK SENKRONİZASYONU BİLGİ KARTI */}
+      <div className="bg-[#FFD700]/[0.03] border border-[#FFD700]/20 p-3 rounded-sm flex items-start gap-2.5">
+        <Zap className="w-4 h-4 text-[#FFD700] shrink-0 mt-0.5" />
+        <div className="space-y-1 text-zinc-400 text-[8.5px] font-mono leading-relaxed">
+          <div className="text-[#FFD700] font-bold uppercase tracking-wider flex items-center gap-2">
+            <span>VİSEME / FONEM DESTEKLİ DUDAK SENKRONİZASYONU (LIP-SYNC)</span>
+            <span className="px-1.5 py-0.2 bg-[#FFD700]/20 text-[#FFD700] text-[7.5px] rounded">10 VİSEME AKTİF</span>
+          </div>
+          <p>
+            Yüklediğiniz veya senkronize ettiğiniz şarkı sözleri otomatik olarak fonemlere ayrıştırılır (<span className="text-zinc-200">A, E, I, O, U, M, F, L, S</span>) ve 3D Anime / Hologram modellerinde (<span className="text-zinc-200">AliciaSolid, Noir Head, Obj Mask</span>) gerçek zamanlı ağız kası blendshape hareketlerine dönüştürülür. Şarkı sözü yokken ağız hareketi durur.
+          </p>
+        </div>
+      </div>
+
+      {/* 3. SENKRONİZASYON SEKMELERİ (AUTO / LRC / SUNO / MANUAL) */}
       <div className="space-y-4">
-        <div className="flex border-b border-zinc-800">
+        <div className="flex flex-wrap border-b border-zinc-800">
           {[
-            { id: 'AUTO', label: '1. AKILLI OTOMATİK SENKRONİZASYON (SÜREYE DAĞIT)' },
-            { id: 'LRC', label: '2. .LRC DOSYASI / METİN İÇE-DIŞA AKTAR' },
-            { id: 'MANUAL', label: `3. CANLI DOKUN & DÜZENLE (${lyricsCount} SATIR)` }
+            { id: 'AUTO', label: '1. AKILLI OTOMATİK SÜRE DAĞITIMI' },
+            { id: 'LRC', label: '2. .LRC DOSYASI / METİN' },
+            { id: 'SUNO', label: '⚡ 3. SUNO AI LİNKİNDEN ÇÖZÜMLE' },
+            { id: 'MANUAL', label: `4. CANLI DOKUN & DÜZENLE (${lyricsCount} SATIR)` }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={cn(
-                "px-4 py-2.5 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer",
+                "px-3.5 py-2.5 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer",
                 activeTab === tab.id
                   ? "border-[#FFD700] text-[#FFD700] bg-[#FFD700]/5"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -350,6 +443,84 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
           </div>
         )}
 
+        {/* SEKME 2.5: SUNO AI LİNKİNDEN LİRİK ÇÖZÜMLE */}
+        {activeTab === 'SUNO' && (
+          <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-800">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono font-bold text-white uppercase flex items-center gap-1.5">
+                <Sparkles size={13} className="text-[#FFD700]" />
+                SUNO ŞARKI LİNKİNDEN LİRİK VE SENKRONİZASYON AKTAR
+              </span>
+              <p className="text-[8.5px] font-mono text-zinc-400">
+                Suno linkini yapıştırın; şarkı sözleri, kelime zamanlamaları (word-level timestamps) ve fonetik dudak senkronizasyonu otomatik hazırlanır.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="relative flex-1">
+                <Link2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="https://suno.com/s/a2hf69thdnYq25lG veya https://suno.com/song/..."
+                  value={sunoUrlInput}
+                  onChange={(e) => setSunoUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleFetchSunoLyrics();
+                  }}
+                  className="w-full bg-black border border-zinc-800 focus:border-[#FFD700] pl-8 pr-3 py-2.5 text-xs font-mono text-white placeholder:text-zinc-600 outline-none rounded-sm"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleFetchSunoLyrics}
+                disabled={isSunoLoading || !sunoUrlInput.trim()}
+                className="px-4 py-2.5 bg-[#FFD700] hover:bg-[#ffe033] text-black font-mono font-bold text-[9.5px] uppercase rounded-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 shrink-0 shadow-[0_0_12px_rgba(255,215,0,0.2)]"
+              >
+                {isSunoLoading ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    ÇÖZÜMLENİYOR...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={12} />
+                    SÖZLERİ ÇEK & UYGULA
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Hızlı Örnekler */}
+            <div className="flex items-center gap-2 pt-1 text-[8px] font-mono text-zinc-500">
+              <span>HIZLI TEST:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSunoUrlInput("https://suno.com/s/a2hf69thdnYq25lG");
+                }}
+                className="text-zinc-400 hover:text-[#FFD700] underline cursor-pointer"
+              >
+                Örnek Kısa Link
+              </button>
+            </div>
+
+            {sunoError && (
+              <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-sm flex items-center gap-2 text-red-300 text-[9px] font-mono">
+                <AlertCircle size={13} className="shrink-0 text-red-400" />
+                <span>{sunoError}</span>
+              </div>
+            )}
+
+            {sunoSuccessMessage && (
+              <div className="p-2.5 bg-emerald-950/40 border border-emerald-800/60 rounded-sm flex items-center gap-2 text-emerald-300 text-[9px] font-mono">
+                <CheckCircle2 size={13} className="shrink-0 text-emerald-400" />
+                <span>{sunoSuccessMessage}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* SEKME 2: LRC DOSYASI VE İÇE/DIŞA AKTAR */}
         {activeTab === 'LRC' && (
           <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-800">
@@ -376,7 +547,19 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
 
             {/* LRC Metin Yapıştırma */}
             <div className="space-y-2">
-              <span className="text-[9px] font-mono text-zinc-400 uppercase">VEYA LRC FORMATINDA METİN YAPIŞTIRIN:</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono text-zinc-400 uppercase">VEYA LRC FORMATINDA METİN YAPIŞTIRIN:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRawLrcInput(MESELE_DEMO_LRC_TEXT);
+                    handleImportLrc(MESELE_DEMO_LRC_TEXT);
+                  }}
+                  className="text-[8px] font-mono text-[#FFD700] hover:underline cursor-pointer"
+                >
+                  Mesele Demo LRC'yi Uygula
+                </button>
+              </div>
               <textarea
                 rows={4}
                 value={rawLrcInput}

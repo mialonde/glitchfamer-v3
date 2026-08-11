@@ -15,6 +15,12 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
     
     private threeCanvas: HTMLCanvasElement;
     
+    private isLoaded = false;
+    private isLoading = true;
+    private currentModelUrl: string = '/models/AliciaSolid.vrm';
+    private loadingError: string | null = null;
+    private baseHeadPos: THREE.Vector3 = new THREE.Vector3(0, 1.35, 0);
+
     private customUniforms = {
         uTime: { value: 0 },
         uBass: { value: 0 },
@@ -42,92 +48,142 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
         const ambient = new THREE.AmbientLight(0xffffff, 0.8);
         this.scene.add(ambient);
 
-        this.loadVRM();
+        this.loadVRM(this.currentModelUrl);
     }
 
-    private loadVRM() {
+    public loadVRM(modelUrl: string = '/models/AliciaSolid.vrm') {
+        this.currentModelUrl = modelUrl;
+        this.isLoading = true;
+        this.isLoaded = false;
+        this.loadingError = null;
+
+        // Clean up previous VRM
+        if (this.vrm) {
+            this.scene.remove(this.vrm.scene);
+            this.vrm = null;
+            this.talkingHead = null;
+        }
+
         const loader = new GLTFLoader();
         loader.register((parser) => {
             return new VRMLoaderPlugin(parser);
         });
 
+        const setupVRM = (vrm: VRM) => {
+            this.vrm = vrm;
+            this.talkingHead = new TalkingHead(vrm);
+            this.scene.add(vrm.scene);
+            this.isLoaded = true;
+            this.isLoading = false;
+            this.loadingError = null;
+            
+            // Standard VRM models face +Z, camera is at +Z looking at 0, 
+            // so rotation.y = Math.PI makes the character face the camera.
+            vrm.scene.rotation.y = Math.PI; 
+            
+            // Auto-focus camera on the character head & store base head position
+            if (vrm.humanoid) {
+                const head = vrm.humanoid.getNormalizedBoneNode('head');
+                if (head) {
+                    head.getWorldPosition(this.baseHeadPos);
+                } else {
+                    const bbox = new THREE.Box3().setFromObject(vrm.scene);
+                    const center = new THREE.Vector3();
+                    bbox.getCenter(center);
+                    this.baseHeadPos.set(center.x, bbox.max.y - (bbox.max.y - bbox.min.y) * 0.14, center.z);
+                }
+            }
+
+            this.updateCameraFraming(this.threeCanvas.width / this.threeCanvas.height);
+
+            // Setup custom shader onBeforeCompile for meshes
+            vrm.scene.traverse((obj) => {
+                if ((obj as THREE.Mesh).isMesh) {
+                    const mesh = obj as THREE.Mesh;
+                    if (mesh.material) {
+                        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                        
+                        materials.forEach(mat => {
+                            if (mat.userData.customShaderInjected) return;
+                            mat.userData.customShaderInjected = true;
+
+                            const originalOnBeforeCompile = mat.onBeforeCompile.bind(mat);
+                            mat.onBeforeCompile = (shader, renderer) => {
+                                originalOnBeforeCompile(shader, renderer);
+
+                                shader.uniforms.uTime = this.customUniforms.uTime;
+                                shader.uniforms.uBass = this.customUniforms.uBass;
+                                shader.uniforms.uMid = this.customUniforms.uMid;
+                                shader.uniforms.uTreble = this.customUniforms.uTreble;
+
+                                shader.vertexShader = `
+                                    uniform float uTime;
+                                    uniform float uBass;
+                                    uniform float uTreble;
+                                ` + shader.vertexShader;
+
+                                shader.vertexShader = shader.vertexShader.replace(
+                                    '#include <begin_vertex>',
+                                    `
+                                    #include <begin_vertex>
+                                    `
+                                );
+                            };
+                        });
+                    }
+                }
+            });
+        };
+
         loader.load(
-            '/models/AliciaSolid.vrm',
+            modelUrl,
             (gltf) => {
                 const vrm = gltf.userData.vrm as VRM;
-                this.vrm = vrm;
-                this.talkingHead = new TalkingHead(vrm);
-                this.scene.add(vrm.scene);
-                
-                // AliciaSolid (VRM 0.0) is facing +Z, camera is at +Z looking at 0, 
-                // so rotation.y = 0 makes her face the camera.
-                vrm.scene.rotation.y = Math.PI; 
-                
-                // Lower arms from T-Pose to A-Pose
-                if (vrm.humanoid) {
-                    const head = vrm.humanoid.getNormalizedBoneNode('head');
-                    if (head) {
-                        const headPos = new THREE.Vector3();
-                        head.getWorldPosition(headPos);
-                        // Position camera directly in front of the head
-                        this.camera.position.set(headPos.x, headPos.y + 0.02, headPos.z + 0.55);
-                        this.camera.lookAt(headPos.x, headPos.y + 0.02, headPos.z);
-                    }
-                    
-                    const leftUpperArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
-                    if (leftUpperArm) leftUpperArm.rotation.z = -1.0; // Rotate down
-                    const rightUpperArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
-                    if (rightUpperArm) rightUpperArm.rotation.z = 1.0; // Rotate down
+                if (vrm) {
+                    setupVRM(vrm);
+                } else {
+                    console.error("No VRM user data found in model file:", modelUrl);
+                    this.isLoading = false;
+                    this.loadingError = "Model dosyasında VRM verisi bulunamadı.";
                 }
-
-                // Setup custom shader onBeforeCompile for meshes
-                vrm.scene.traverse((obj) => {
-                    if ((obj as THREE.Mesh).isMesh) {
-                        const mesh = obj as THREE.Mesh;
-                        if (mesh.material) {
-                            // Convert material to an array if it's not
-                            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-                            
-                            materials.forEach(mat => {
-                                if (mat.userData.customShaderInjected) return;
-                                mat.userData.customShaderInjected = true;
-
-                                const originalOnBeforeCompile = mat.onBeforeCompile.bind(mat);
-                                mat.onBeforeCompile = (shader, renderer) => {
-                                    // Let the original material set its defines and uniforms first
-                                    originalOnBeforeCompile(shader, renderer);
-
-                                    shader.uniforms.uTime = this.customUniforms.uTime;
-                                    shader.uniforms.uBass = this.customUniforms.uBass;
-                                    shader.uniforms.uMid = this.customUniforms.uMid;
-                                    shader.uniforms.uTreble = this.customUniforms.uTreble;
-
-                                    // Add uniforms to vertex shader
-                                    shader.vertexShader = `
-                                        uniform float uTime;
-                                        uniform float uBass;
-                                        uniform float uTreble;
-                                    ` + shader.vertexShader;
-
-                                    // Removed vertex ripple completely to avoid mesh tearing, keeping face stable
-                                    shader.vertexShader = shader.vertexShader.replace(
-                                        '#include <begin_vertex>',
-                                        `
-                                        #include <begin_vertex>
-                                        `
-                                    );
-                                };
-                            });
-                        }
-                    }
-                });
             },
             (progress) => {},
-            (error) => console.error("VRM Load Error:", error)
+            (error) => {
+                console.warn(`VRM load error for ${modelUrl}:`, error);
+                // Fallback to AliciaSolid if local path failed
+                if (modelUrl !== '/models/AliciaSolid.vrm') {
+                    console.log("Attempting fallback to /models/AliciaSolid.vrm");
+                    this.loadVRM('/models/AliciaSolid.vrm');
+                    return;
+                }
+
+                const fallbackUrl = 'https://raw.githubusercontent.com/vrm-c/UniVRM/master/Tests/Models/Alicia_vrm-0.51/AliciaSolid_vrm-0.51.vrm';
+                loader.load(
+                    fallbackUrl,
+                    (gltf) => {
+                        const vrm = gltf.userData.vrm as VRM;
+                        if (vrm) {
+                            setupVRM(vrm);
+                        }
+                    },
+                    undefined,
+                    (fallbackErr) => {
+                        console.error("VRM Fallback Load Failed:", fallbackErr);
+                        this.isLoading = false;
+                        this.loadingError = "VRM modeli yüklenemedi.";
+                    }
+                );
+            }
         );
     }
 
     public update(audio: AudioEvents, settings: VisualizerSettings): void {
+        // Dynamic Model URL Switch
+        const targetModelUrl = settings.vrmModelUrl || '/models/AliciaSolid.vrm';
+        if (targetModelUrl !== this.currentModelUrl) {
+            this.loadVRM(targetModelUrl);
+        }
+
         this.customUniforms.uTime.value = audio.time;
         this.customUniforms.uBass.value = audio.bassEnergy ?? audio.kick ?? 0;
         this.customUniforms.uMid.value = audio.midEnergy ?? audio.snare ?? 0;
@@ -142,108 +198,106 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
         }
     }
 
+    /**
+     * Tüm En-Boy Oranlarında (16:9, 1:1, 9:16) KAFAYI Ana Materyal & Odak Noktası Olarak Kadrajlama
+     */
+    private updateCameraFraming(aspect: number): void {
+        if (!this.vrm) return;
+
+        const headX = this.baseHeadPos.x;
+        const headY = this.baseHeadPos.y;
+        const headZ = this.baseHeadPos.z;
+
+        // 16:9, 1:1 ve 9:16 için dinamik kamera mesafesi ve kadraj hesabı
+        const baseDistance = 0.50;
+        let distance = baseDistance;
+        let yOffset = 0.01;
+        let targetFov = 34;
+
+        if (aspect < 0.8) {
+            // 9:16 Dikey Format (Reels / TikTok / Shorts)
+            // Dar genişlikte saç/kafa kesilmesini önlemek ve kafayı ekranın üst-orta altın oranına oturtmak için dinamik mesafe
+            distance = baseDistance * (0.85 / Math.max(0.45, aspect));
+            yOffset = -0.035; // Kafayı ana odak olarak üst-orta alana merkezler
+            targetFov = 35;
+        } else if (aspect >= 0.8 && aspect < 1.4) {
+            // 1:1 Kare Format (Avatar / Kapak / Profil)
+            distance = 0.52;
+            yOffset = 0.012;
+            targetFov = 34;
+        } else {
+            // 16:9 Geniş Ekran (Sinematik / YouTube)
+            distance = 0.48;
+            yOffset = 0.01;
+            targetFov = 32;
+        }
+
+        const targetX = headX;
+        const targetY = headY + yOffset;
+        const targetZ = headZ;
+
+        this.camera.fov = targetFov;
+        this.camera.aspect = aspect;
+        this.camera.position.set(targetX, targetY, targetZ + distance);
+        this.camera.lookAt(targetX, targetY, targetZ);
+        this.camera.updateProjectionMatrix();
+    }
+
     public render(context: RenderContext): void {
         const { ctx, width, height, audio, settings } = context;
+        const aspect = width / height;
 
         // Resize three canvas if needed
         if (this.threeCanvas.width !== width || this.threeCanvas.height !== height) {
             this.threeCanvas.width = width;
             this.threeCanvas.height = height;
             this.renderer.setSize(width, height);
-            this.camera.aspect = width / height;
-            this.camera.updateProjectionMatrix();
         }
 
-        // Render Three.js Scene
+        // 16:9, 9:16 ve 1:1 oranlarında kafaya mükemmel odaklama
+        this.updateCameraFraming(aspect);
+
+        // Render Three.js Scene (Three.js WebGL canvas alpha: true is transparent)
         this.renderer.render(this.scene, this.camera);
 
-        // Clear 2D Canvas (Background)
-        ctx.fillStyle = '#050508'; // Darker background
-        ctx.fillRect(0, 0, width, height);
-
-        if (settings.avatarMode === 'anime') {
-            // Solid Mode (Anime)
-            ctx.drawImage(this.threeCanvas, 0, 0, width, height);
-        } else {
-            // Hologram Mode
+        if (!this.isLoaded) {
+            // Cyberpunk Holographic Loading Indicator (Transparent overlay)
             ctx.save();
+            ctx.fillStyle = '#00F0FF';
+            ctx.font = '10px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('INITIALIZING 3D VRM AVATAR NEURAL RIG...', width / 2, height / 2 - 20);
             
-            // Slight cyan/blue tint & additive blending for hologram glow
-            ctx.globalCompositeOperation = 'screen';
-            ctx.globalAlpha = 0.85;
-            
-            // Chromatic aberration (RGB Split)
-            // Red channel shift
-            ctx.drawImage(this.threeCanvas, -2, 0, width, height);
-            // Cyan channel shift
-            ctx.drawImage(this.threeCanvas, 2, 0, width, height);
-            
-            ctx.globalAlpha = 1.0;
-            ctx.drawImage(this.threeCanvas, 0, 0, width, height);
-            
-            // Scanlines overlay
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.05)';
-            for (let y = 0; y < height; y += 4) {
-                ctx.fillRect(0, y, width, 1);
-            }
-            ctx.restore();
-        }
-
-        // Vokal: Gözlerde waveform yansıyor / Post Processing (Distortion/Pixelation)
-        const treble = audio.trebleEnergy ?? audio.hihat ?? 0;
-        const mid = audio.midEnergy ?? audio.snare ?? 0;
-        const bass = audio.bassEnergy ?? audio.kick ?? 0;
-
-        // Kuantum Parçalanma (Treble Peak Glitch - 2D Canvas)
-        if (treble > 0.75) {
-            const glitchIntensity = (treble - 0.75) * 60;
-            const slices = 5;
-            for (let i = 0; i < slices; i++) {
-                const sliceHeight = Math.random() * 30 + 5;
-                const y = Math.random() * height;
-                const xOffset = (Math.random() - 0.5) * glitchIntensity;
-                
-                try {
-                    const imgData = ctx.getImageData(0, y, width, sliceHeight);
-                    // Rgb split effect occasionally
-                    if (Math.random() > 0.5) {
-                        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
-                        ctx.fillRect(0, y, width, sliceHeight);
-                        ctx.globalCompositeOperation = 'lighter';
-                    }
-                    ctx.putImageData(imgData, xOffset, y);
-                    ctx.globalCompositeOperation = 'source-over';
-                } catch (e) {} // Ignore bounds errors
-            }
-        }
-
-        // Overlay Vokal (Waveform yansıması - Holo HUD Effect)
-        if (mid > 0.3) {
-            ctx.save();
-            ctx.globalCompositeOperation = 'screen';
-            ctx.strokeStyle = `rgba(0, 255, 255, ${mid * 0.6})`;
-            ctx.lineWidth = 3;
+            const spin = audio.time * 4;
+            ctx.strokeStyle = '#00F0FF';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            
-            // Sadece ortadaki göz hizasına waveform çiziyoruz (Anime karakterin gözlerinin olduğu yaklaşık Y)
-            const eyeY = height * 0.40; 
-            const waveWidth = width * 0.6;
-            const startX = width * 0.2;
-            
-            for (let i = 0; i < audio.spectrum.length; i += 2) {
-                const x = startX + (i / audio.spectrum.length) * waveWidth;
-                const v = audio.spectrum[i] * 60 * mid;
-                if (i === 0) ctx.moveTo(x, eyeY - v);
-                else ctx.lineTo(x, eyeY - v);
-            }
+            ctx.arc(width / 2, height / 2 + 15, 18, spin, spin + Math.PI * 1.5);
             ctx.stroke();
             ctx.restore();
+            return;
+        }
+
+        const isHologram = settings.avatarMode === 'hologram';
+
+        if (!isHologram) {
+            // Solid Anime Mode (Default): Clean, crisp, high-definition 3D character directly on top of background
+            ctx.save();
+            ctx.drawImage(this.threeCanvas, 0, 0, width, height);
+            ctx.restore();
+        } else {
+            // Hologram 3D Mode: Elegant holographic glow with subtle cyan ambience
+            ctx.save();
             
-            // Neon Glitch Box around eyes
-            if (bass > 0.6) {
-                ctx.strokeStyle = `rgba(255, 0, 128, ${bass * 0.3})`;
-                ctx.strokeRect(startX, eyeY - 40, waveWidth, 80);
-            }
+            // Base character draw
+            ctx.drawImage(this.threeCanvas, 0, 0, width, height);
+
+            // Subtle holographic bloom overlay
+            ctx.globalCompositeOperation = 'screen';
+            ctx.globalAlpha = 0.35 + (audio.energy * 0.25);
+            ctx.drawImage(this.threeCanvas, 0, 0, width, height);
+
+            ctx.restore();
         }
     }
 }
