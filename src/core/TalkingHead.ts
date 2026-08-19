@@ -148,10 +148,14 @@ export class TalkingHead {
         q.setFromEuler(this.tempEuler.set(0.0, 0.0, 0.0, 'XYZ'));
         break;
 
-      // Omurga, Boyun ve Kafa: Nötr kanonik duruş (Identity)
-      case 'spine':
+      // Omurga, Boyun ve Kafa: Nötr kanonik duruş
       case 'neck':
+        q.setFromEuler(this.tempEuler.set(-0.03, 0.0, 0.0, 'XYZ'));
+        break;
       case 'head':
+        q.setFromEuler(this.tempEuler.set(-0.06, 0.0, 0.0, 'XYZ'));
+        break;
+      case 'spine':
       default:
         q.identity();
         break;
@@ -237,10 +241,20 @@ export class TalkingHead {
     const lookUp = Math.max(0, eyeY);
     const lookDown = Math.max(0, -eyeY);
 
-    this.vrm.expressionManager?.setValue('lookLeft', lookLeft);
-    this.vrm.expressionManager?.setValue('lookRight', lookRight);
-    this.vrm.expressionManager?.setValue('lookUp', lookUp);
-    this.vrm.expressionManager?.setValue('lookDown', lookDown);
+    if (!this.vrm.lookAt || !this.vrm.lookAt.autoUpdate) {
+      this.vrm.expressionManager?.setValue('lookLeft', lookLeft);
+      this.vrm.expressionManager?.setValue('lookRight', lookRight);
+      this.vrm.expressionManager?.setValue('lookUp', lookUp);
+      this.vrm.expressionManager?.setValue('lookDown', lookDown);
+    }
+
+    if (this.vrm.lookAt && !this.vrm.lookAt.autoUpdate) {
+      // In three-vrm, yaw and pitch are in DEGREES.
+      // Since eyeX and eyeY are normalized offsets (approx -0.1 to 0.1),
+      // we scale them to a natural range of motion (e.g., max 22 degrees yaw, 18 degrees pitch).
+      this.vrm.lookAt.yaw = eyeX * 220.0;
+      this.vrm.lookAt.pitch = eyeY * 180.0;
+    }
 
     // -------------------------------------------------------------
     // LAYER 4 & 5: Breathing, Posture & Body Performance Kinematics

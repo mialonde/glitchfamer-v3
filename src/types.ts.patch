@@ -1,0 +1,25 @@
+--- src/types.ts
++++ src/types.ts
+@@ -194,6 +194,22 @@
+   createdAt: number;
+ }
+ 
++// CMS & Admin Types
++export interface CMSPage {
++  id: string;
++  title: string;
++  slug: string;
++  content: string;
++  createdAt: number;
++}
++
++export interface CMSLayout {
++  headerTitle: string;
++  headerLinks: { id: string; label: string; url: string }[];
++  footerText: string;
++}
++
++
+ export interface AudioEngineState {
+   isPlaying: boolean;
+   currentTime: number;

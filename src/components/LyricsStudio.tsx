@@ -64,9 +64,15 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
   onChange
 }) => {
   const [activeTab, setActiveTab] = useState<'AUTO' | 'LRC' | 'SUNO' | 'MANUAL'>('LRC');
-  const [rawTextInput, setRawTextInput] = useState(DEMO_LYRICS_TEXT);
+  const [rawTextInput, setRawTextInput] = useState(settings.rawLyrics || DEMO_LYRICS_TEXT);
   const [rawLrcInput, setRawLrcInput] = useState(MESELE_DEMO_LRC_TEXT);
   const [liveTapIndex, setLiveTapIndex] = useState(0);
+
+  useEffect(() => {
+    if (settings.rawLyrics) {
+      setRawTextInput(settings.rawLyrics);
+    }
+  }, [settings.rawLyrics]);
 
   // Suno Link Çözümleme State'i
   const [sunoUrlInput, setSunoUrlInput] = useState('https://suno.com/s/a2hf69thdnYq25lG');
@@ -238,6 +244,60 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
     }
   };
 
+  const formatSrtTime = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+  };
+
+  const formatVttTime = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+  };
+
+  const handleDownloadSrt = () => {
+    if (!settings.syncedLyrics || settings.syncedLyrics.length === 0) return;
+    let srtContent = "";
+    settings.syncedLyrics.forEach((line, index) => {
+      srtContent += `${index + 1}\n`;
+      srtContent += `${formatSrtTime(line.startTime)} --> ${formatSrtTime(line.endTime)}\n`;
+      srtContent += `${line.text}\n\n`;
+    });
+    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${settings.trackTitle || 'vidframer_lyrics'}.srt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadVtt = () => {
+    if (!settings.syncedLyrics || settings.syncedLyrics.length === 0) return;
+    let vttContent = "WEBVTT\n\n";
+    settings.syncedLyrics.forEach((line, index) => {
+      vttContent += `${index + 1}\n`;
+      vttContent += `${formatVttTime(line.startTime)} --> ${formatVttTime(line.endTime)}\n`;
+      vttContent += `${line.text}\n\n`;
+    });
+    const blob = new Blob([vttContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${settings.trackTitle || 'vidframer_lyrics'}.vtt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const lyricsCount = settings.syncedLyrics?.length || 0;
 
   return (
@@ -245,12 +305,12 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
       {/* 1. ÜST BAŞLIK & GENEL AÇ/KAPA DÜĞMESİ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/[0.08] pb-3 gap-2">
         <div className="flex items-center gap-2">
-          <Type className={cn("w-4 h-4 transition-colors", settings.lyricsEnabled !== false ? "text-[#FFD700]" : "text-zinc-600")} />
+          <Type className={cn("w-4 h-4 transition-colors", settings.lyricsEnabled !== false ? "text-accent" : "text-content-tertiary")} />
           <div>
-            <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-white">
+            <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-content-primary">
               ŞARKI SÖZLERİ (KINETIC LYRICS)
             </h3>
-            <p className="text-[8.5px] text-zinc-500 font-mono">
+            <p className="text-[8.5px] text-content-tertiary font-sans">
               Otomatik süre dağıtıcı, .LRC içe/dışa aktarma veya canlı senkronizasyon.
             </p>
           </div>
@@ -260,10 +320,10 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
         <button
           onClick={() => onChange({ lyricsEnabled: !(settings.lyricsEnabled !== false) })}
           className={cn(
-            "px-3 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border rounded-sm transition-all flex items-center gap-1.5 cursor-pointer",
+            "px-3 py-1 text-[9px] font-sans font-bold uppercase tracking-wider border rounded-sm transition-all flex items-center gap-1.5 cursor-pointer",
             settings.lyricsEnabled !== false
-              ? "bg-[#FFD700] text-black border-[#FFD700] shadow-[0_0_12px_rgba(255,215,0,0.25)]"
-              : "bg-black/60 text-zinc-500 border-white/[0.08] hover:border-zinc-700"
+              ? "bg-accent text-black border-accent shadow-[0_0_12px_rgba(255,215,0,0.25)]"
+              : "bg-panel text-content-tertiary border-white/[0.08] hover:border-border-strong"
           )}
         >
           {settings.lyricsEnabled !== false ? <Eye size={12} /> : <EyeOff size={12} />}
@@ -272,10 +332,10 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
       </div>
 
       {/* 2. GÖRSEL TİPOGRAFİ VE KONUM AYARLARI */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-black/40 p-3.5 border border-white/[0.08] rounded-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-panel p-3.5 border border-white/[0.08] rounded-sm">
         {/* Stil Seçici */}
         <div className="space-y-1.5">
-          <label className="text-[9px] font-mono uppercase text-zinc-400">TİPOGRAFİ STİLİ:</label>
+          <label className="text-[9px] font-sans uppercase text-content-secondary">TİPOGRAFİ STİLİ:</label>
           <div className="grid grid-cols-2 gap-1.5">
             {[
               { id: 'KINETIC', label: 'KINETIC GLOW', desc: 'Vuruşlu brütalist' },
@@ -290,8 +350,8 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                 className={cn(
                   "p-2 text-left border transition-all cursor-pointer",
                   (settings.lyricsStyle || 'KINETIC') === st.id
-                    ? "bg-[#FFD700] text-black border-[#FFD700] font-black"
-                    : "bg-black text-zinc-400 border-zinc-800 hover:border-zinc-700"
+                    ? "bg-accent text-black border-accent font-black"
+                    : "bg-panel text-content-secondary border-border-strong hover:border-border-strong"
                 )}
               >
                 <div className="text-[8px] font-bold uppercase">{st.label}</div>
@@ -302,7 +362,7 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
 
         {/* Konum Seçici */}
         <div className="space-y-1.5">
-          <label className="text-[9px] font-mono uppercase text-zinc-400">EKRAN KONUMU:</label>
+          <label className="text-[9px] font-sans uppercase text-content-secondary">EKRAN KONUMU:</label>
           <div className="grid grid-cols-3 gap-1.5">
             {[
               { id: 'TOP', label: 'ÜST' },
@@ -315,8 +375,8 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                 className={cn(
                   "py-3 text-center border transition-all cursor-pointer font-bold text-[9px] uppercase",
                   (settings.lyricsPosition || 'BOTTOM') === pos.id
-                    ? "bg-[#FFD700] text-black border-[#FFD700]"
-                    : "bg-black text-zinc-400 border-zinc-800 hover:border-zinc-700"
+                    ? "bg-accent text-black border-accent"
+                    : "bg-panel text-content-secondary border-border-strong hover:border-border-strong"
                 )}
               >
                 {pos.label}
@@ -326,9 +386,9 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
 
           {/* Yazı Boyutu */}
           <div className="pt-2 space-y-1">
-            <div className="flex justify-between text-[8px] font-mono">
-              <span className="text-zinc-500 uppercase">YAZI BOYUTU:</span>
-              <span className="text-[#FFD700] font-bold">{settings.lyricsFontSize || 42}px</span>
+            <div className="flex justify-between text-[8px] font-sans">
+              <span className="text-content-tertiary uppercase">YAZI BOYUTU:</span>
+              <span className="text-accent font-bold">{settings.lyricsFontSize || 42}px</span>
             </div>
             <input
               type="range"
@@ -337,14 +397,14 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
               step="2"
               value={settings.lyricsFontSize || 42}
               onChange={(e) => onChange({ lyricsFontSize: parseInt(e.target.value) })}
-              className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
           </div>
         </div>
 
         {/* Vurgu Rengi */}
         <div className="space-y-1.5">
-          <label className="text-[9px] font-mono uppercase text-zinc-400">LİRİK VURGU RENGİ:</label>
+          <label className="text-[9px] font-sans uppercase text-content-secondary">LİRİK VURGU RENGİ:</label>
           <div className="grid grid-cols-3 gap-1.5">
             {[
               { name: 'GOLD', color: '#FFD700' },
@@ -360,12 +420,12 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                 className={cn(
                   "p-2 flex items-center gap-1.5 border transition-all cursor-pointer",
                   (settings.lyricsColor || '#FFD700') === c.color
-                    ? "border-[#FFD700] bg-zinc-900"
-                    : "border-zinc-800 bg-black hover:border-zinc-700"
+                    ? "border-accent bg-surface"
+                    : "border-border-strong bg-panel hover:border-border-strong"
                 )}
               >
                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
-                <span className="text-[8px] font-bold text-zinc-300">{c.name}</span>
+                <span className="text-[8px] font-bold text-content-secondary">{c.name}</span>
               </button>
             ))}
           </div>
@@ -373,22 +433,22 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
       </div>
 
       {/* 2.5 VİSEME DİJİTAL DUDAK SENKRONİZASYONU BİLGİ KARTI */}
-      <div className="bg-[#FFD700]/[0.03] border border-[#FFD700]/20 p-3 rounded-sm flex items-start gap-2.5">
-        <Zap className="w-4 h-4 text-[#FFD700] shrink-0 mt-0.5" />
-        <div className="space-y-1 text-zinc-400 text-[8.5px] font-mono leading-relaxed">
-          <div className="text-[#FFD700] font-bold uppercase tracking-wider flex items-center gap-2">
+      <div className="bg-[#FFD700]/[0.03] border border-accent/20 p-3 rounded-sm flex items-start gap-2.5">
+        <Zap className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+        <div className="space-y-1 text-content-secondary text-[8.5px] font-sans leading-relaxed">
+          <div className="text-accent font-bold uppercase tracking-wider flex items-center gap-2">
             <span>VİSEME / FONEM DESTEKLİ DUDAK SENKRONİZASYONU (LIP-SYNC)</span>
-            <span className="px-1.5 py-0.2 bg-[#FFD700]/20 text-[#FFD700] text-[7.5px] rounded">10 VİSEME AKTİF</span>
+            <span className="px-1.5 py-0.2 bg-accent/20 text-accent text-[7.5px] rounded">10 VİSEME AKTİF</span>
           </div>
           <p>
-            Yüklediğiniz veya senkronize ettiğiniz şarkı sözleri otomatik olarak fonemlere ayrıştırılır (<span className="text-zinc-200">A, E, I, O, U, M, F, L, S</span>) ve 3D Anime / Hologram modellerinde (<span className="text-zinc-200">AliciaSolid, Noir Head, Obj Mask</span>) gerçek zamanlı ağız kası blendshape hareketlerine dönüştürülür. Şarkı sözü yokken ağız hareketi durur.
+            Yüklediğiniz veya senkronize ettiğiniz şarkı sözleri otomatik olarak fonemlere ayrıştırılır (<span className="text-content-primary">A, E, I, O, U, M, F, L, S</span>) ve 3D Anime / Hologram modellerinde (<span className="text-content-primary">AliciaSolid, Noir Head, Obj Mask</span>) gerçek zamanlı ağız kası blendshape hareketlerine dönüştürülür. Şarkı sözü yokken ağız hareketi durur.
           </p>
         </div>
       </div>
 
       {/* 3. SENKRONİZASYON SEKMELERİ (AUTO / LRC / SUNO / MANUAL) */}
       <div className="space-y-4">
-        <div className="flex flex-wrap border-b border-zinc-800">
+        <div className="flex flex-wrap border-b border-border-strong">
           {[
             { id: 'AUTO', label: '1. AKILLI OTOMATİK SÜRE DAĞITIMI' },
             { id: 'LRC', label: '2. .LRC DOSYASI / METİN' },
@@ -401,8 +461,8 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
               className={cn(
                 "px-3.5 py-2.5 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer",
                 activeTab === tab.id
-                  ? "border-[#FFD700] text-[#FFD700] bg-[#FFD700]/5"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  ? "border-accent text-accent bg-[#FFD700]/5"
+                  : "border-transparent text-content-tertiary hover:text-content-secondary"
               )}
             >
               {tab.label}
@@ -412,14 +472,14 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
 
         {/* SEKME 1: AKILLI OTOMATİK SENKRONİZASYON */}
         {activeTab === 'AUTO' && (
-          <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-800">
+          <div className="space-y-4 bg-panel p-4 border border-border-strong">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono text-zinc-400">
+              <span className="text-[9px] font-sans text-content-secondary">
                 Şarkı sözlerini alt alta yapıştırın. Sistem şarkının toplam süresine ({Math.round(duration || 180)} sn) göre satırları akıcı ve eşit şekilde senkronize eder.
               </span>
               <button
                 onClick={() => setRawTextInput(DEMO_LYRICS_TEXT)}
-                className="text-[8px] font-mono text-[#FFD700] hover:underline cursor-pointer"
+                className="text-[8px] font-sans text-accent hover:underline cursor-pointer"
               >
                 Örnek Demo Metin Doldur
               </button>
@@ -430,12 +490,12 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
               value={rawTextInput}
               onChange={(e) => setRawTextInput(e.target.value)}
               placeholder="Her satıra bir lirik gelecek şekilde yapıştırın..."
-              className="w-full bg-black border border-zinc-800 p-3 text-xs font-mono text-zinc-200 focus:border-[#FFD700] outline-none"
+              className="w-full bg-panel border border-border-strong p-3 text-xs font-sans text-content-primary focus:border-accent outline-none"
             />
 
             <button
               onClick={handleAutoSync}
-              className="w-full py-3 bg-[#FFD700] hover:bg-white text-black font-black text-[10px] tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(255,215,0,0.2)]"
+              className="w-full py-3 bg-accent hover:bg-white text-black font-black text-[10px] tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(255,215,0,0.2)]"
             >
               <Zap size={14} />
               <span>ŞARKI SÜRESİNE GÖRE ANINDA SENKRONİZE ET & UYGULA</span>
@@ -445,20 +505,20 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
 
         {/* SEKME 2.5: SUNO AI LİNKİNDEN LİRİK ÇÖZÜMLE */}
         {activeTab === 'SUNO' && (
-          <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-800">
+          <div className="space-y-4 bg-panel p-4 border border-border-strong">
             <div className="space-y-1">
-              <span className="text-[10px] font-mono font-bold text-white uppercase flex items-center gap-1.5">
-                <Sparkles size={13} className="text-[#FFD700]" />
+              <span className="text-[10px] font-sans font-bold text-content-primary uppercase flex items-center gap-1.5">
+                <Sparkles size={13} className="text-accent" />
                 SUNO ŞARKI LİNKİNDEN LİRİK VE SENKRONİZASYON AKTAR
               </span>
-              <p className="text-[8.5px] font-mono text-zinc-400">
+              <p className="text-[8.5px] font-sans text-content-secondary">
                 Suno linkini yapıştırın; şarkı sözleri, kelime zamanlamaları (word-level timestamps) ve fonetik dudak senkronizasyonu otomatik hazırlanır.
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="relative flex-1">
-                <Link2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <Link2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-content-tertiary" />
                 <input
                   type="text"
                   placeholder="https://suno.com/s/a2hf69thdnYq25lG veya https://suno.com/song/..."
@@ -467,7 +527,7 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleFetchSunoLyrics();
                   }}
-                  className="w-full bg-black border border-zinc-800 focus:border-[#FFD700] pl-8 pr-3 py-2.5 text-xs font-mono text-white placeholder:text-zinc-600 outline-none rounded-sm"
+                  className="w-full bg-panel border border-border-strong focus:border-accent pl-8 pr-3 py-2.5 text-xs font-sans text-content-primary placeholder:text-content-tertiary outline-none rounded-sm"
                 />
               </div>
 
@@ -475,7 +535,7 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                 type="button"
                 onClick={handleFetchSunoLyrics}
                 disabled={isSunoLoading || !sunoUrlInput.trim()}
-                className="px-4 py-2.5 bg-[#FFD700] hover:bg-[#ffe033] text-black font-mono font-bold text-[9.5px] uppercase rounded-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 shrink-0 shadow-[0_0_12px_rgba(255,215,0,0.2)]"
+                className="px-4 py-2.5 bg-accent hover:bg-[#ffe033] text-black font-sans font-bold text-[9.5px] uppercase rounded-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 shrink-0 shadow-[0_0_12px_rgba(255,215,0,0.2)]"
               >
                 {isSunoLoading ? (
                   <>
@@ -492,28 +552,28 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
             </div>
 
             {/* Hızlı Örnekler */}
-            <div className="flex items-center gap-2 pt-1 text-[8px] font-mono text-zinc-500">
+            <div className="flex items-center gap-2 pt-1 text-[8px] font-sans text-content-tertiary">
               <span>HIZLI TEST:</span>
               <button
                 type="button"
                 onClick={() => {
                   setSunoUrlInput("https://suno.com/s/a2hf69thdnYq25lG");
                 }}
-                className="text-zinc-400 hover:text-[#FFD700] underline cursor-pointer"
+                className="text-content-secondary hover:text-accent underline cursor-pointer"
               >
                 Örnek Kısa Link
               </button>
             </div>
 
             {sunoError && (
-              <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-sm flex items-center gap-2 text-red-300 text-[9px] font-mono">
+              <div className="p-2.5 bg-red-950/40 border border-red-800/60 rounded-sm flex items-center gap-2 text-red-300 text-[9px] font-sans">
                 <AlertCircle size={13} className="shrink-0 text-red-400" />
                 <span>{sunoError}</span>
               </div>
             )}
 
             {sunoSuccessMessage && (
-              <div className="p-2.5 bg-emerald-950/40 border border-emerald-800/60 rounded-sm flex items-center gap-2 text-emerald-300 text-[9px] font-mono">
+              <div className="p-2.5 bg-emerald-950/40 border border-emerald-800/60 rounded-sm flex items-center gap-2 text-emerald-300 text-[9px] font-sans">
                 <CheckCircle2 size={13} className="shrink-0 text-emerald-400" />
                 <span>{sunoSuccessMessage}</span>
               </div>
@@ -523,39 +583,67 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
 
         {/* SEKME 2: LRC DOSYASI VE İÇE/DIŞA AKTAR */}
         {activeTab === 'LRC' && (
-          <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-800">
+          <div className="space-y-4 bg-panel p-4 border border-border-strong">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* LRC Dosyası Yükle */}
-              <label className="border border-dashed border-zinc-800 p-6 text-center cursor-pointer hover:border-[#FFD700] transition-colors bg-black flex flex-col items-center justify-center">
+              <label className="border border-dashed border-border-strong p-6 text-center cursor-pointer hover:border-accent transition-colors bg-panel flex flex-col items-center justify-center">
                 <input type="file" accept=".lrc,text/plain" onChange={handleLrcFileUpload} className="hidden" />
-                <Upload size={20} className="text-[#FFD700] mb-2" />
-                <span className="text-[10px] font-black uppercase text-zinc-200">.LRC DOSYASI YÜKLE</span>
-                <span className="text-[8px] font-mono text-zinc-500 mt-1">Zaman damgalı standart lirik dosyası</span>
+                <Upload size={20} className="text-accent mb-2" />
+                <span className="text-[10px] font-black uppercase text-content-primary">.LRC DOSYASI YÜKLE</span>
+                <span className="text-[8px] font-sans text-content-tertiary mt-1">Zaman damgalı standart lirik dosyası</span>
               </label>
 
               {/* Mevcut Sözleri LRC Olarak İndir */}
               <button
                 onClick={handleDownloadLrc}
                 disabled={lyricsCount === 0}
-                className="border border-zinc-800 p-6 text-center hover:border-[#FFD700] transition-colors bg-black flex flex-col items-center justify-center disabled:opacity-40 cursor-pointer"
+                className="border border-border-strong p-6 text-center hover:border-accent transition-colors bg-panel flex flex-col items-center justify-center disabled:opacity-40 cursor-pointer"
               >
-                <Download size={20} className="text-[#FFD700] mb-2" />
-                <span className="text-[10px] font-black uppercase text-zinc-200">.LRC OLARAK İNDİR</span>
-                <span className="text-[8px] font-mono text-zinc-500 mt-1">{lyricsCount} adet senkronize satırı dışa aktar</span>
+                <Download size={20} className="text-accent mb-2" />
+                <span className="text-[10px] font-black uppercase text-content-primary">.LRC OLARAK İNDİR</span>
+                <span className="text-[8px] font-sans text-content-tertiary mt-1">{lyricsCount} adet senkronize satırı dışa aktar</span>
               </button>
+            </div>
+
+            {/* Altyazı Dışa Aktarma Formatları */}
+            <div className="pt-2 border-t border-zinc-850 space-y-2">
+              <span className="text-[9px] font-sans font-bold text-content-secondary uppercase tracking-widest block">
+                VİDEO ALTYAZI FORMATLARINDA DIŞA AKTAR
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={handleDownloadSrt}
+                  disabled={lyricsCount === 0}
+                  className="py-3 px-4 border border-border-strong hover:border-accent text-center bg-panel hover:bg-panel text-[9px] font-sans uppercase tracking-wider text-content-secondary flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
+                >
+                  <Download size={13} className="text-accent" />
+                  <span>SRT ALTYAZI İNDİR (.srt)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadVtt}
+                  disabled={lyricsCount === 0}
+                  className="py-3 px-4 border border-border-strong hover:border-accent text-center bg-panel hover:bg-panel text-[9px] font-sans uppercase tracking-wider text-content-secondary flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
+                >
+                  <Download size={13} className="text-accent" />
+                  <span>VTT ALTYAZI İNDİR (.vtt)</span>
+                </button>
+              </div>
             </div>
 
             {/* LRC Metin Yapıştırma */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-mono text-zinc-400 uppercase">VEYA LRC FORMATINDA METİN YAPIŞTIRIN:</span>
+                <span className="text-[9px] font-sans text-content-secondary uppercase">VEYA LRC FORMATINDA METİN YAPIŞTIRIN:</span>
                 <button
                   type="button"
                   onClick={() => {
                     setRawLrcInput(MESELE_DEMO_LRC_TEXT);
                     handleImportLrc(MESELE_DEMO_LRC_TEXT);
                   }}
-                  className="text-[8px] font-mono text-[#FFD700] hover:underline cursor-pointer"
+                  className="text-[8px] font-sans text-accent hover:underline cursor-pointer"
                 >
                   Mesele Demo LRC'yi Uygula
                 </button>
@@ -565,11 +653,11 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                 value={rawLrcInput}
                 onChange={(e) => setRawLrcInput(e.target.value)}
                 placeholder="[00:12.30] Şarkı sözü satırı..."
-                className="w-full bg-black border border-zinc-800 p-3 text-xs font-mono text-zinc-200 focus:border-[#FFD700] outline-none"
+                className="w-full bg-panel border border-border-strong p-3 text-xs font-sans text-content-primary focus:border-accent outline-none"
               />
               <button
                 onClick={() => handleImportLrc(rawLrcInput)}
-                className="px-4 py-2 bg-zinc-900 hover:bg-[#FFD700] text-zinc-200 hover:text-black font-black text-[9px] uppercase tracking-wider border border-zinc-800 cursor-pointer"
+                className="px-4 py-2 bg-surface hover:bg-accent text-content-primary hover:text-black font-black text-[9px] uppercase tracking-wider border border-border-strong cursor-pointer"
               >
                 YAPIŞTIRILAN LRC'Yİ AKTİF ET
               </button>
@@ -579,15 +667,15 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
 
         {/* SEKME 3: MANUEL CANLI SENKRONİZASYON STÜDYOSU */}
         {activeTab === 'MANUAL' && (
-          <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-800">
+          <div className="space-y-4 bg-panel p-4 border border-border-strong">
             {/* CANLI TAP KONTROL PANELİ */}
-            <div className="bg-black p-4 border border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="bg-panel p-4 border border-border-strong flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="space-y-1">
-                <div className="text-[10px] font-black uppercase tracking-wider text-white flex items-center gap-2">
-                  <Clock size={13} className="text-[#FFD700]" />
+                <div className="text-[10px] font-black uppercase tracking-wider text-content-primary flex items-center gap-2">
+                  <Clock size={13} className="text-accent" />
                   <span>ŞARKI ZAMANI: {Math.floor(currentTime / 60)}:{(currentTime % 60).toFixed(1).padStart(4, '0')} sn</span>
                 </div>
-                <p className="text-[8px] font-mono text-zinc-500">
+                <p className="text-[8px] font-sans text-content-tertiary">
                   Şarkıyı oynatın. Şarkıcı bir sonraki satıra her geçtiğinde büyük sarı butona dokunun (veya 'T' tuşuna basın).
                 </p>
               </div>
@@ -595,9 +683,9 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={onTogglePlay}
-                  className="px-3 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-bold uppercase flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-2 bg-surface border border-border-strong hover:border-border-strong text-xs font-bold uppercase flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Play size={12} className={isPlaying ? "text-[#FFD700]" : ""} />
+                  <Play size={12} className={isPlaying ? "text-accent" : ""} />
                   <span>{isPlaying ? 'DURAKLAT' : 'ŞARKIYI ÇAL'}</span>
                 </button>
 
@@ -605,7 +693,7 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                 <button
                   onClick={handleLiveTapNext}
                   disabled={lyricsCount === 0 || liveTapIndex >= lyricsCount}
-                  className="px-5 py-2.5 bg-[#FFD700] hover:bg-white text-black font-black text-[10px] tracking-widest uppercase border border-[#FFD700] transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(255,215,0,0.3)] disabled:opacity-40"
+                  className="px-5 py-2.5 bg-accent hover:bg-white text-black font-black text-[10px] tracking-widest uppercase border border-accent transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(255,215,0,0.3)] disabled:opacity-40"
                 >
                   <Radio size={14} className="animate-pulse" />
                   <span>BU SATIRA DOKUN (CANLI TAP) [{liveTapIndex + 1}/{lyricsCount}]</span>
@@ -625,38 +713,38 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                       className={cn(
                         "p-2.5 border flex items-center gap-3 transition-all",
                         isCurrentLive
-                          ? "border-[#FFD700] bg-[#FFD700]/10"
+                          ? "border-accent bg-accent/10"
                           : isCurrentTimeActive
-                          ? "border-zinc-600 bg-zinc-900/50"
-                          : "border-zinc-900 bg-black"
+                          ? "border-zinc-600 bg-surface/50"
+                          : "border-border-subtle bg-panel"
                       )}
                     >
                       {/* Sıra Numarası */}
-                      <span className="text-[9px] font-mono text-zinc-500 w-5 text-right font-bold">
+                      <span className="text-[9px] font-sans text-content-tertiary w-5 text-right font-bold">
                         {idx + 1}.
                       </span>
 
                       {/* Başlangıç Saniyesi */}
                       <div className="flex items-center gap-1">
-                        <span className="text-[8px] font-mono text-zinc-600">BAŞLA:</span>
+                        <span className="text-[8px] font-sans text-content-tertiary">BAŞLA:</span>
                         <input
                           type="number"
                           step="0.1"
                           value={line.startTime}
                           onChange={(e) => handleUpdateLine(idx, 'startTime', parseFloat(e.target.value) || 0)}
-                          className="w-14 bg-zinc-900 border border-zinc-800 px-1 py-0.5 text-[9px] font-mono text-[#FFD700] text-center"
+                          className="w-14 bg-surface border border-border-strong px-1 py-0.5 text-[9px] font-sans text-accent text-center"
                         />
                       </div>
 
                       {/* Bitiş Saniyesi */}
                       <div className="flex items-center gap-1">
-                        <span className="text-[8px] font-mono text-zinc-600">BİTİR:</span>
+                        <span className="text-[8px] font-sans text-content-tertiary">BİTİR:</span>
                         <input
                           type="number"
                           step="0.1"
                           value={line.endTime}
                           onChange={(e) => handleUpdateLine(idx, 'endTime', parseFloat(e.target.value) || 0)}
-                          className="w-14 bg-zinc-900 border border-zinc-800 px-1 py-0.5 text-[9px] font-mono text-zinc-400 text-center"
+                          className="w-14 bg-surface border border-border-strong px-1 py-0.5 text-[9px] font-sans text-content-secondary text-center"
                         />
                       </div>
 
@@ -665,7 +753,7 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                         type="text"
                         value={line.text}
                         onChange={(e) => handleUpdateLine(idx, 'text', e.target.value)}
-                        className="flex-1 bg-transparent border-b border-zinc-800 focus:border-[#FFD700] px-2 py-0.5 text-xs text-white outline-none font-bold"
+                        className="flex-1 bg-transparent border-b border-border-strong focus:border-accent px-2 py-0.5 text-xs text-content-primary outline-none font-bold"
                       />
 
                       {/* Canlı Tap Seçimi */}
@@ -673,8 +761,8 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                         onClick={() => setLiveTapIndex(idx)}
                         title="Bu satırı canlı tap hedefi yap"
                         className={cn(
-                          "px-2 py-1 text-[8px] font-mono uppercase border cursor-pointer",
-                          isCurrentLive ? "bg-[#FFD700] text-black border-[#FFD700] font-bold" : "text-zinc-500 border-zinc-800 hover:text-white"
+                          "px-2 py-1 text-[8px] font-sans uppercase border cursor-pointer",
+                          isCurrentLive ? "bg-accent text-black border-accent font-bold" : "text-content-tertiary border-border-strong hover:text-content-primary"
                         )}
                       >
                         {isCurrentLive ? 'HEDEF' : 'SEÇ'}
@@ -691,24 +779,24 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
                   );
                 })
               ) : (
-                <div className="text-center py-6 text-[10px] font-mono text-zinc-600">
+                <div className="text-center py-6 text-[10px] font-sans text-content-tertiary">
                   Henüz lirik eklenmedi. Yukarıdaki "1. Akıllı Senkronizasyon" sekmesinden veya "Satır Ekle" butonundan başlayabilirsiniz.
                 </div>
               )}
             </div>
 
             {/* Satır Ekle & Sıfırla Butonları */}
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-900">
+            <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
               <button
                 onClick={handleAddLine}
-                className="px-3 py-1.5 bg-zinc-900 hover:bg-[#FFD700] text-zinc-300 hover:text-black border border-zinc-800 text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-surface hover:bg-accent text-content-secondary hover:text-black border border-border-strong text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus size={12} /> SATIR EKLE
               </button>
 
               <button
                 onClick={() => setLiveTapIndex(0)}
-                className="text-[8px] font-mono text-zinc-500 hover:text-zinc-300 flex items-center gap-1 cursor-pointer"
+                className="text-[8px] font-sans text-content-tertiary hover:text-content-secondary flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw size={10} /> Canlı Tap Hedefini Başa Al
               </button>

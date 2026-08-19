@@ -27,51 +27,42 @@ Aktif render motoru kapasitesini ve çözünürlük seçeneklerini döndürür.
 
 ---
 
-## 2. Parçalı (Chunked) Yükleme ve Render API'leri
+## 2. Doğrudan & Parçalı Render Başlatma API'leri
 
-### POST `/api/render/upload-chunk`
-Büyük medya dosyalarını parçalar halinde sunucuya yükler.
+### POST `/api/render/upload-and-start`
+Ses ve görsel varlıkları tek bir atomik istekte sunucuya yükler, kuyruğa alır ve 60 FPS FFmpeg render işlemini başlatır.
 - **Content-Type**: `multipart/form-data`
 - **Body Parametreleri**:
-  - `uploadId` (string): Benzersiz yükleme oturum kimliği.
-  - `fileType` (string): Dosya tipi (`audio`, `cover`, `logo`).
-  - `chunkIndex` (number): Parça sırası (0'dan başlar).
-  - `totalChunks` (number): Toplam parça sayısı.
-  - `chunk` (file): Parça verisi (max 10MB).
-- **Yanıt (200 OK)**:
-  ```json
-  {
-    "success": true,
-    "uploadId": "sess_12345",
-    "fileType": "audio",
-    "chunkIndex": 0,
-    "totalChunks": 5
-  }
-  ```
-
-### POST `/api/render/assemble-and-start`
-Yüklenen tüm parçaları senkronize olarak birleştirir ve sunucu tarafı FFmpeg render işlemini başlatır.
-- **Content-Type**: `application/json`
-- **Body**:
-  ```json
-  {
-    "uploadId": "sess_12345",
-    "settings": { "mode": "SIMULATION", "aspectRatio": "16/9" },
-    "duration": 120.5,
-    "fps": 30,
-    "quality": "1080p",
-    "hasCover": true,
-    "hasLogo": false
-  }
-  ```
+  - `audio` (file): Ana ses dosyası (WAV/FLAC/MP3).
+  - `cover` (file, opsiyonel): Kapak görseli.
+  - `logo` (file, opsiyonel): Logo görseli.
+  - `bgImage` (file, opsiyonel): Arka plan görseli.
+  - `settings` (JSON string): Görselleştirici ve efekt ayarları.
+  - `duration` (string/number): Süre.
+  - `quality` (string): `1080p` veya `720p`.
 - **Yanıt (200 OK)**:
   ```json
   {
     "jobId": "render_17125000_abc123",
     "status": "queued",
-    "message": "Dosyalar birleştirildi ve render işlemi başlatıldı."
+    "message": "Render işlemi kuyruğa alındı ve başlatıldı."
   }
   ```
+
+### POST `/api/render/convert-webm-to-mp4`
+İstemci tarafında kaydedilen WebM videolarını sunucuda donanım uyumlu H.264/AAC MP4 formatına dönüştürür.
+- **Content-Type**: `multipart/form-data`
+- **Body Parametreleri**:
+  - `video` (file): İstemci WebM kaydı.
+  - `aspectRatio` (string): `16/9`, `9/16` veya `1/1`.
+- **Yanıt**: `.mp4` dosya indirmesi.
+
+---
+
+## 3. Render Kuyruğu & Eşzamanlılık (Concurrency)
+- **Maksimum Eşzamanlı İş (MAX_CONCURRENT_RENDERS)**: 2 CPU render işi.
+- Fazla gelen istekler `queued` durumunda bekletilir ve CPU kilitlenmesi engellenir.
+- Otomatik 15 dakikalık disk süpürme cron'u, 20 dakikadan eski geçici dosyaları temizler.
 
 ---
 

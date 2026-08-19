@@ -54,6 +54,7 @@ export class AudioEngine {
   private waveShaper: WaveShaperNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private masterGain: GainNode | null = null;
+  private playbackGain: GainNode | null = null;
   private masteringSettings: MasteringSettings;
 
   // 5. Export Chain
@@ -63,6 +64,12 @@ export class AudioEngine {
   private state: AudioEnginePlaybackState;
   private listeners: Set<AudioEngineStateListener> = new Set();
   private timeUpdateInterval: number | null = null;
+  private trimConfig: { enabled: boolean; start: number; end: number; loop: boolean } = {
+    enabled: false,
+    start: 0,
+    end: 0,
+    loop: true
+  };
 
   public static readonly DEFAULT_MASTERING_SETTINGS: MasteringSettings = {
     preset: 'BYPASS',
@@ -247,6 +254,11 @@ export class AudioEngine {
     const masterGain = ctx.createGain();
     this.masterGain = masterGain;
 
+    // 7. Playback (Speaker) Output Gain
+    const playbackGain = ctx.createGain();
+    playbackGain.gain.value = this.state.isMuted ? 0 : 1;
+    this.playbackGain = playbackGain;
+
     // --- 5. Export Destination ---
     const exportDestination = ctx.createMediaStreamDestination();
     this.exportDestination = exportDestination;
@@ -260,8 +272,9 @@ export class AudioEngine {
     this.compressor.connect(this.masterGain);
 
     // MasterGain Çıkış Yönlendirmeleri:
-    // 1. Hoparlör (ctx.destination)
-    this.masterGain.connect(ctx.destination);
+    // 1. Hoparlör (playbackGain -> ctx.destination)
+    this.masterGain.connect(this.playbackGain);
+    this.playbackGain.connect(ctx.destination);
     // 2. Ana Spektrum Analyser
     this.masterGain.connect(this.mainAnalyser);
     // 3. Export Stream Destination (MediaRecorder kaydı için)
@@ -546,14 +559,43 @@ export class AudioEngine {
   }
 
   public setMuted(muted: boolean): void {
-    if (this.audioElement) {
-      this.audioElement.muted = muted;
+    if (this.playbackGain) {
+      this.playbackGain.gain.value = muted ? 0 : 1;
     }
+    // DO NOT mute the actual audioElement, as it will mute the MediaElementSource stream in Chrome!
     this.updateState({ isMuted: muted });
   }
 
   public toggleMute(): void {
     this.setMuted(!this.state.isMuted);
+  }
+
+  /**
+   * Snippet & Trim Kontrolü: Belirtilen aralığı (start - end) uygular
+   */
+  public setTrimRange(enabled: boolean, start: number, end: number, loop: boolean = true): void {
+    this.trimConfig = {
+      enabled,
+      start: Math.max(0, start),
+      end: Math.max(start + 0.1, end),
+      loop
+    };
+  }
+
+  public getTrimRange(): { enabled: boolean; start: number; end: number; loop: boolean } {
+    return { ...this.trimConfig };
+  }
+
+  /**
+   * Kesitin başına atlar ve oynatır
+   */
+  public playFromTrimStart(): void {
+    if (this.trimConfig.enabled) {
+      this.seek(this.trimConfig.start);
+    } else {
+      this.seek(0);
+    }
+    this.play();
   }
 
   /**
@@ -617,13 +659,29 @@ export class AudioEngine {
     this.stopTimeTracker();
     this.timeUpdateInterval = window.setInterval(() => {
       if (this.audioElement && this.state.isPlaying) {
+        const curTime = this.audioElement.currentTime;
+
+        // Trim & Snippet sınır kontrolü
+        if (this.trimConfig.enabled && this.trimConfig.end > this.trimConfig.start) {
+          if (curTime >= this.trimConfig.end) {
+            if (this.trimConfig.loop) {
+              this.audioElement.currentTime = this.trimConfig.start;
+            } else {
+              this.pause();
+              this.audioElement.currentTime = this.trimConfig.start;
+            }
+          } else if (curTime < this.trimConfig.start - 0.5) {
+            this.audioElement.currentTime = this.trimConfig.start;
+          }
+        }
+
         const reduction = this.getReduction();
         this.updateState({
           currentTime: this.audioElement.currentTime,
           reduction
         });
       }
-    }, 100);
+    }, 50);
   }
 
   private stopTimeTracker() {

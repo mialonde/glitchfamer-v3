@@ -38,6 +38,14 @@ GlitchFramer, müzik ve ses dosyalarını yüksek çözünürlüklü (1080p/720p
   - Soft tube / analog saturasyon (WaveShaper tanh egrisi) ve DynamicsCompressor limiter katmanı.
   - Hazır presets: `SPOTIFY`, `YOUTUBE`, `PHONK`, `WARM_TAPE`, `BYPASS`.
 
+- **Gelişmiş UX, Proje Yönetimi & Performans**:
+  - **Undo / Redo (Geri / İleri Al)**: `Ctrl+Z` ve `Ctrl+Y` klavye kısayolları ve arayüz butonları ile 50 adımlık görsel ayar geçmişini yönetme.
+  - **Proje Kaydetme & Yükleme**: Projeyi `.json` formatında dışa aktarma (export) ve geri yükleme (import).
+  - **Otomatik Seans Kurtarma (Autosave)**: Tarayıcıda otomatik seans yedeklemesi ve açılışta kurtarma bildirimi.
+  - **Eco Mod (Düşük Performans / Pil Tasarrufu)**: Mobil/eski cihazlarda 60 FPS akıcılığı korumak adına partikülleri %50 düşüren ve ağır shader efektlerini kapatan tek tıkla optimizasyon.
+  - **Altyazı Dışa Aktarım (SRT & VTT)**: Senkronize edilen şarkı sözlerini saniye/milisaniye hassasiyetli `.srt` ve `.vtt` olarak indirebilme.
+  - **Sekme Kapanma Koruması**: Kayıt veya render esnasında sekmeyi kazara kapatmayı önleyen `beforeunload` uyarısı.
+
 ---
 
 ## 🛠️ Kurulum

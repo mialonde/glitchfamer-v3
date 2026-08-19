@@ -281,6 +281,7 @@ export class AudioAnalysisCore {
 export class OfflineAudioProcessor {
   private fft: FastFourierTransform;
   private core: AudioAnalysisCore;
+  private vocalFrequencyData: Uint8Array | null = null;
   public readonly fftSize: number = 1024;
   public readonly sampleRate: number;
 
@@ -310,6 +311,21 @@ export class OfflineAudioProcessor {
     // 1. Gerçek FFT Hesabı ile Spektrum Üret
     const frequencyData = this.fft.forward(pcmSamples, offset, 0.75);
 
+    // Simulated Vocal Bandpass Filter (Center: 1750Hz, Q: 0.7) to match client-side Web Audio filter
+    if (!this.vocalFrequencyData || this.vocalFrequencyData.length !== frequencyData.length) {
+      this.vocalFrequencyData = new Uint8Array(frequencyData.length);
+    }
+    const vocalFrequencyData = this.vocalFrequencyData;
+
+    for (let i = 0; i < frequencyData.length; i++) {
+      const freq = i * (this.sampleRate / this.fftSize);
+      // H(s) = (s/Q) / (s^2 + s/Q + 1) where s = f/f0
+      const s = freq / 1750;
+      const denom = Math.sqrt((1 - s*s)*(1 - s*s) + (s/0.7)*(s/0.7));
+      const magnitude = denom > 0 ? (s/0.7) / denom : 0;
+      vocalFrequencyData[i] = Math.round(frequencyData[i] * magnitude);
+    }
+
     // 2. Zaman-Domain Waveform RMS Gücü Hesabı
     let sumSq = 0;
     const isInt16 = pcmSamples instanceof Int16Array;
@@ -324,7 +340,7 @@ export class OfflineAudioProcessor {
     const rawRMS = Math.min(1, Math.sqrt(sumSq / this.fftSize) * 2.8);
 
     // 3. Ortak Çekirdek İşlemcisi İle AudioEvents Üret
-    return this.core.process(frequencyData, rawRMS, currentTime, delta);
+    return this.core.process(frequencyData, rawRMS, currentTime, delta, vocalFrequencyData);
   }
 
   public reset(): void {

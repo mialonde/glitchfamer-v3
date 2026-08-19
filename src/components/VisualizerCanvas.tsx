@@ -29,6 +29,7 @@ interface Props {
   onSeekTo?: (time: number) => void;
   onRecordingComplete?: (blobUrl: string) => void;
   onRecordingStatusChange?: (recording: boolean) => void;
+  onUpdateSettings?: (newSettings: Partial<VisualizerSettings>) => void;
 }
 
 export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
@@ -49,13 +50,35 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   onSeekRelative,
   onSeekTo,
   onRecordingComplete,
-  onRecordingStatusChange
+  onRecordingStatusChange,
+  onUpdateSettings
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoBgRef = useRef<HTMLVideoElement>(null);
   const rendererRef = useRef<StudioRenderer | null>(null);
   const processorRef = useRef<AudioProcessor | null>(null);
+  
+  // Interactive Text Drag-and-Drop & Free Placement State
+  const [showPlacementGuides, setShowPlacementGuides] = useState(false);
+  const [activeDragTarget, setActiveDragTarget] = useState<'title' | 'artist' | null>(null);
+  const [isSnappedX, setIsSnappedX] = useState(false);
+  const [selectedTextElement, setSelectedTextElement] = useState<'title' | 'artist' | null>(null);
+  const dragStartRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    initialTitleX: number;
+    initialTitleY: number;
+    initialArtistX: number;
+    initialArtistY: number;
+  }>({
+    pointerX: 0,
+    pointerY: 0,
+    initialTitleX: 50,
+    initialTitleY: 78,
+    initialArtistX: 50,
+    initialArtistY: 84
+  });
   
   // Interactive User Pointer & Orbit Gesture State
   const interactionRef = useRef<UserInteractionState>({
@@ -76,6 +99,12 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHud, setShowHud] = useState(false);
   const hudTimeoutRef = useRef<number | null>(null);
+
+  // Keep settings synchronized in a mutable Ref to prevent render loop teardown
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   // Render Durumu ve İlerleme
   const [internalRecording, setInternalRecording] = useState(false);
@@ -121,6 +150,13 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     }
   }, [analyserRef, vocalAnalyserRef]);
 
+  // Aspect Ratio değiştiğinde (Canvas key ile unmount olduğunda) renderer'ı sıfırla
+  useEffect(() => {
+    if (canvasRef.current) {
+      rendererRef.current = new StudioRenderer(canvasRef.current);
+    }
+  }, [settings.aspectRatio]);
+
   // 2. Görselleri Motora Yükle
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -136,7 +172,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     } else {
       rendererRef.current?.setCoverImage(null);
     }
-  }, [coverUrl]);
+  }, [coverUrl, settings.aspectRatio]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -152,7 +188,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     } else {
       rendererRef.current?.setLogoImage(null);
     }
-  }, [logoUrl]);
+  }, [logoUrl, settings.aspectRatio]);
 
   // Arka Plan Görselini Yükle ve Motora Bağla
   const activeImageUrl = bgImageUrl || settings.bgImageUrl;
@@ -170,7 +206,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     } else {
       rendererRef.current?.setBgImage(null);
     }
-  }, [activeImageUrl]);
+  }, [activeImageUrl, settings.aspectRatio]);
 
   // Arka Plan Videosunu Yükle ve Motora Bağla
   const activeVideoUrl = bgVideoUrl || settings.bgVideoUrl;
@@ -183,7 +219,15 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     if (activeVideoUrl && videoBgRef.current) {
       videoBgRef.current.src = activeVideoUrl;
       videoBgRef.current.load();
-      videoBgRef.current.play().catch(e => console.warn("Background video auto-play:", e));
+      videoBgRef.current.loop = true;
+      videoBgRef.current.muted = true;
+      videoBgRef.current.playsInline = true;
+      
+      if (isPlaying) {
+        videoBgRef.current.play().catch(e => console.warn("Background video play failed:", e));
+      } else {
+        videoBgRef.current.pause();
+      }
       rendererRef.current?.setBgVideo(videoBgRef.current);
     } else {
       if (videoBgRef.current) {
@@ -192,7 +236,18 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
       }
       rendererRef.current?.setBgVideo(null);
     }
-  }, [activeVideoUrl]);
+  }, [activeVideoUrl, settings.aspectRatio]);
+
+  // Sync background video playback state with main player state
+  useEffect(() => {
+    if (videoBgRef.current && activeVideoUrl) {
+      if (isPlaying) {
+        videoBgRef.current.play().catch(e => console.warn("Background video play sync failed:", e));
+      } else {
+        videoBgRef.current.pause();
+      }
+    }
+  }, [isPlaying, activeVideoUrl]);
 
   // Unmount Cleanup
   useEffect(() => {
@@ -272,7 +327,11 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
       }
       rendererRef.current.setInteraction(inter);
 
-      rendererRef.current.render(audioEvents, settings);
+      if (audioEvents) {
+        audioEvents.duration = audioRef.current?.duration || duration || 180;
+      }
+
+      rendererRef.current.render(audioEvents, settingsRef.current);
     }
   };
 
@@ -293,7 +352,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
 
     animId = requestAnimationFrame(renderLoop);
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, isRecording, settings, audioRef, analyserRef]);
+  }, [isPlaying, isRecording, audioRef, analyserRef]);
 
   const stopActiveRecording = () => {
     if (progressTimerRef.current) {
@@ -329,6 +388,12 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     },
     startRecording: (duration: number) => {
       if (!canvasRef.current || !audioRef.current) return;
+      
+      // Chrome captureStream resolution bug workaround: explicitly force attributes and styles before capture
+      const w = settings.aspectRatio === '16/9' ? 1920 : 1080;
+      const h = settings.aspectRatio === '16/9' ? 1080 : settings.aspectRatio === '1/1' ? 1080 : 1920;
+      canvasRef.current.width = w;
+      canvasRef.current.height = h;
       
       const targetDuration = duration && !isNaN(duration) && duration > 0 ? duration : 30;
       setRecordTotal(targetDuration);
@@ -549,6 +614,57 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     triggerHudActivity();
     const coords = getCanvasCoords(e);
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
+
+    // DETECT CLICK NEAR SONG TITLE OR ARTIST FOR DRAGGING
+    const canvas = canvasRef.current;
+    const width = canvas?.width || 1920;
+    const height = canvas?.height || 1080;
+    const isVertical = height > width;
+
+    const titlePctX = settings.titleX ?? 50;
+    const titlePctY = settings.titleY ?? (isVertical ? 76 : 80);
+    const titlePosX = (titlePctX / 100) * width;
+    const titlePosY = (titlePctY / 100) * height;
+
+    const isIndependent = settings.titlePositionMode === 'independent';
+    const artistPctX = isIndependent ? (settings.artistX ?? 50) : titlePctX;
+    const artistPctY = isIndependent ? (settings.artistY ?? (isVertical ? 82 : 86)) : (titlePctY + (isVertical ? 5.5 : 5.0));
+    const artistPosX = (artistPctX / 100) * width;
+    const artistPosY = (artistPctY / 100) * height;
+
+    const distToTitle = Math.hypot(coords.x - titlePosX, coords.y - titlePosY);
+    const distToArtist = Math.hypot(coords.x - artistPosX, coords.y - artistPosY);
+
+    // Hit test radius: scale up based on canvas size vs client screen size for better comfort
+    const clientRect = canvas?.getBoundingClientRect();
+    const pxScale = clientRect ? (width / clientRect.width) : 1;
+    const hitRadiusTitle = Math.max(90, (settings.titleFontSize ?? 48) * 1.8 * pxScale);
+    const hitRadiusArtist = Math.max(70, (settings.artistFontSize ?? 26) * 1.8 * pxScale);
+
+    let dragTarget: 'title' | 'artist' | null = null;
+    if (distToTitle < hitRadiusTitle && distToTitle <= distToArtist && settings.showTrackTitle !== false) {
+      dragTarget = 'title';
+    } else if (distToArtist < hitRadiusArtist && settings.showArtistName !== false) {
+      dragTarget = 'artist';
+    } else if (distToTitle < hitRadiusTitle && settings.showTrackTitle !== false) {
+      dragTarget = 'title';
+    }
+
+    if (dragTarget) {
+      setActiveDragTarget(dragTarget);
+      setShowPlacementGuides(true);
+      setSelectedTextElement(dragTarget);
+      dragStartRef.current = {
+        pointerX: coords.x,
+        pointerY: coords.y,
+        initialTitleX: titlePctX,
+        initialTitleY: titlePctY,
+        initialArtistX: artistPctX,
+        initialArtistY: artistPctY
+      };
+      return; // Skip standard 3D orbit interaction when dragging text
+    }
+
     const inter = interactionRef.current;
     inter.isPointerDown = true;
     inter.pointerX = coords.x;
@@ -571,6 +687,65 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     triggerHudActivity();
     const coords = getCanvasCoords(e);
+
+    if (activeDragTarget) {
+      const dx = coords.x - dragStartRef.current.pointerX;
+      const dy = coords.y - dragStartRef.current.pointerY;
+      const canvas = canvasRef.current;
+      const width = canvas?.width || 1920;
+      const height = canvas?.height || 1080;
+
+      const dxPct = (dx / width) * 100;
+      const dyPct = (dy / height) * 100;
+
+      let newTitleX = dragStartRef.current.initialTitleX + dxPct;
+      let newTitleY = dragStartRef.current.initialTitleY + dyPct;
+      let newArtistX = dragStartRef.current.initialArtistX + dxPct;
+      let newArtistY = dragStartRef.current.initialArtistY + dyPct;
+
+      newTitleX = Math.max(2, Math.min(98, newTitleX));
+      newTitleY = Math.max(2, Math.min(98, newTitleY));
+      newArtistX = Math.max(2, Math.min(98, newArtistX));
+      newArtistY = Math.max(2, Math.min(98, newArtistY));
+
+      // Alignment snapping with snap indication
+      let snappedX = false;
+      if (Math.abs(newTitleX - 50) < 1.8) {
+        newTitleX = 50;
+        snappedX = true;
+      }
+      if (Math.abs(newArtistX - 50) < 1.8) {
+        newArtistX = 50;
+        snappedX = true;
+      }
+      setIsSnappedX(snappedX);
+
+      if (onUpdateSettings) {
+        const isIndependent = settings.titlePositionMode === 'independent';
+        if (activeDragTarget === 'title') {
+          if (!isIndependent) {
+            onUpdateSettings({
+              titleX: newTitleX,
+              titleY: newTitleY,
+              artistX: newTitleX,
+              artistY: Math.min(98, newTitleY + 5.5)
+            });
+          } else {
+            onUpdateSettings({
+              titleX: newTitleX,
+              titleY: newTitleY
+            });
+          }
+        } else if (activeDragTarget === 'artist') {
+          onUpdateSettings({
+            artistX: newArtistX,
+            artistY: newArtistY
+          });
+        }
+      }
+      return;
+    }
+
     const inter = interactionRef.current;
     inter.pointerX = coords.x;
     inter.pointerY = coords.y;
@@ -587,6 +762,13 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
   };
 
   const handlePointerUp = () => {
+    if (activeDragTarget) {
+      setActiveDragTarget(null);
+      setShowPlacementGuides(false);
+      setIsSnappedX(false);
+      return;
+    }
+
     const inter = interactionRef.current;
     inter.isPointerDown = false;
     inter.gravityAttractor = null;
@@ -607,13 +789,13 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
       className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden group select-none"
     >
       
-      {/* Dynamic Hidden Video Element for Background Video Layer */}
+      {/* Dynamic Hidden Video Element for Background Video Layer (Render-tree active offscreen fallback for modern browser engines) */}
       <video 
         ref={videoBgRef} 
         loop 
         muted 
         playsInline 
-        className="hidden" 
+        className="absolute pointer-events-none opacity-0 w-px h-px overflow-hidden -left-[9999px]" 
         crossOrigin="anonymous"
       />
       
@@ -725,6 +907,7 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
 
       {/* Main Interactive Canvas Viewport */}
       <canvas
+        key={settings.aspectRatio}
         ref={canvasRef}
         width={settings.aspectRatio === '16/9' ? 1920 : 1080}
         height={settings.aspectRatio === '16/9' ? 1080 : settings.aspectRatio === '1/1' ? 1080 : 1920}
@@ -735,6 +918,35 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
         onDoubleClick={handleDoubleClick}
         className="w-full h-full object-contain drop-shadow-[0_0_50px_rgba(255,215,0,0.1)] transition-all duration-300 cursor-grab active:cursor-grabbing touch-none select-none"
       />
+
+      {/* DRAG-AND-DROP PLACEMENT GUIDELINES & SNAPPING OVERLAYS */}
+      {showPlacementGuides && (
+        <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
+          {/* Subtle Outer Boundary Guide */}
+          <div className="absolute inset-4 border border-dashed border-[#FFD700]/20 rounded-md" />
+          
+          {/* Center Vertical Snapping Guide */}
+          <div className={`absolute inset-y-0 w-px transition-colors duration-100 ${isSnappedX ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-[#FFD700]/15 border-l border-dashed border-[#FFD700]/30'}`} style={{ left: '50%' }} />
+
+          {/* Active Coordinate Information HUD Card */}
+          <div className="absolute top-4 left-4 bg-black/90 backdrop-blur border border-[#FFD700]/40 rounded px-2.5 py-1.5 font-mono text-[9px] text-[#FFD700] flex flex-col gap-0.5 shadow-xl animate-in fade-in-50">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FFD700] animate-pulse" />
+              <span className="font-bold uppercase">📍 PLACEMENT HUD</span>
+            </div>
+            <div className="text-zinc-400 mt-1">
+              DÜZENLENEN: <span className="text-white font-bold">{selectedTextElement === 'title' ? 'ŞARKI BAŞLIĞI' : 'SANATÇI ADI'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-zinc-400">
+              X: <span className={isSnappedX ? 'text-emerald-400 font-bold' : 'text-[#FFD700]'}>%{selectedTextElement === 'title' ? (settings.titleX ?? 50).toFixed(1) : (settings.artistX ?? 50).toFixed(1)}</span>
+              Y: <span className="text-[#FFD700]">%{selectedTextElement === 'title' ? (settings.titleY ?? 78).toFixed(1) : (settings.artistY ?? 84).toFixed(1)}</span>
+            </div>
+            <div className="text-[7.5px] text-zinc-500 mt-0.5 uppercase">
+              MOD: {settings.titlePositionMode === 'independent' ? 'BAĞIMSIZ BÖLGE' : 'BİRLEŞİK TAKİP'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* RENDER PERDESİ (İşleniyor Ekranı - Stüdyo Modu) */}
       {isRecording && (

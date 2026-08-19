@@ -4,6 +4,18 @@ Projedeki tüm güncellemeler ve sürüm geçmişi.
 
 ---
 
+## [2.1.0] - 2026-08-10
+
+### ✨ Eklenen Özellikler (Added)
+- **Geri Al / Yeniden Yap (Undo / Redo) Desteği**: Sahnede yapılan 50 adımlık görselleştirici ayar geçmişini hafızada (past/future settings stacks) tutarak `Ctrl+Z`, `Ctrl+Y` ve arayüz butonları ile geri/ileri alabilme desteği.
+- **Proje Kaydetme ve Yükleme (.JSON)**: Tüm görsel ve şarkı sözü ayarlarını `.json` formatında bilgisayara indirme ve dosyayı açarak projeye kaldığı yerden devam etme özelliği.
+- **Otomatik Seans Kurtarma (Autosave)**: Tarayıcıda `localStorage` üzerinde çalışan `"vidframer_project_autosave"` anahtarıyla otomatik periyodik yedekleme. Sistem açılışında yarım kalan seansı kurtarma banner'ı.
+- **Eco Mode (Düşük Performans / Pil Tasarrufu)**: Mobil ve eski cihazlarda 60 FPS akıcılığı korumak adına tek tıkla aktifleşen Eco Mod seçeneği. Aktifken partikül yoğunluğunu %50 düşürür, ölçeği optimize eder ve işlemciyi/GPU'yu yoran ağır shader efektlerini (Bloom, Motion Trail, Glitch Slice, RGB Split) otomatik devreden çıkarır.
+- **Video Altyazı Dışa Aktarımı (SRT & VTT Export)**: Senkronize edilen şarkı sözlerini standart video oynatıcılar ve video kurgu yazılımları ile doğrudan uyumlu kılmak için milisaniye hassasiyetli zaman kodlu `.srt` (SubRip) ve `.vtt` (WebVTT) formatlarında indirebilme.
+- **Sekmeden Ayrılma/Yenileme Koruması**: Canlı kayıt veya sunucu render işlemi devam ederken sekmeyi kazara kapatmayı önleyen tarayıcı seviyesi `beforeunload` koruması.
+
+---
+
 ## [2.0.0] - 2026-08-08
 
 ### ✨ Eklenen Özellikler (Added)
@@ -24,5 +36,5 @@ Projedeki tüm güncellemeler ve sürüm geçmişi.
 ## 🔮 Gelecek Yol Haritası (Future Roadmap)
 
 - [ ] WebGPU tabanlı 3D şader (Shader) görselleştiricileri.
-- [ ] SRT / VTT altyazı dosyası dışa aktarma (Export) desteği.
+- [x] SRT / VTT altyazı dosyası dışa aktarma (Export) desteği.
 - [ ] Çoklu dil (i18n) arayüz desteği.

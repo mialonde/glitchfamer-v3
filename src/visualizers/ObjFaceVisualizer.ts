@@ -37,6 +37,92 @@ interface Triangle {
   nz: number;
 }
 
+interface RGB {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface HSL {
+  h: number;
+  s: number;
+  l: number;
+}
+
+function hexToRgb(hex: string): RGB {
+  hex = hex.replace(/^#/, '');
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 3) {
+    r = parseInt(hex[0] + hex[0], 16);
+    g = parseInt(hex[1] + hex[1], 16);
+    b = parseInt(hex[2] + hex[2], 16);
+  } else if (hex.length === 6) {
+    r = parseInt(hex.substring(0, 2), 16);
+    g = parseInt(hex.substring(2, 4), 16);
+    b = parseInt(hex.substring(4, 6), 16);
+  } else {
+    return { r: 79, g: 134, b: 247 }; // default #4f86f7
+  }
+  return { r, g, b };
+}
+
+function rgbToHsl(rgb: RGB): HSL {
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+
+  return {
+    h: Math.round(h * 360),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100)
+  };
+}
+
+function hslToRgb(hsl: HSL): RGB {
+  const h = hsl.h / 360;
+  const s = hsl.s / 100;
+  const l = hsl.l / 100;
+  let r = l, g = l, b = l;
+
+  if (s !== 0) {
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+
+  return {
+    r: Math.round(r * 255),
+    g: Math.round(g * 255),
+    b: Math.round(b * 255)
+  };
+}
+
 export class ObjFaceVisualizer implements IVisualizer {
   public name = 'OBJ_FACE_MASK';
   
@@ -53,12 +139,115 @@ export class ObjFaceVisualizer implements IVisualizer {
 
   private async loadObj() {
     try {
-      const response = await fetch('/models/face.obj');
-      const text = await response.text();
+      let text = '';
+      if (typeof window === 'undefined') {
+        // Server-side (Node.js/SSR) fallback to procedural high-res cyber-mask to avoid dynamic require
+        this.createProceduralFaceFallback();
+        return;
+      } else {
+        // Client-side browser load
+        const response = await fetch('/models/face.obj');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        text = await response.text();
+      }
       this.parseObj(text);
     } catch (error) {
-      console.error("Failed to load face.obj", error);
+      console.warn("Failed to load face.obj, using premium procedural siber-mask fallback:", error);
+      this.createProceduralFaceFallback();
     }
+  }
+
+  private createProceduralFaceFallback() {
+    console.log("Generating procedural siber-mask fallback...");
+    const rawVertices: { x: number; y: number; z: number }[] = [];
+    this.faces = [];
+    this.vertices = [];
+
+    // Create a beautiful 3D grid shaped like a mask/face (spherical half-dome with mouth and eyes cut-out)
+    const cols = 16;
+    const rows = 16;
+    for (let r = 0; r <= rows; r++) {
+      const phi = (r / rows) * Math.PI * 0.75; // latitude
+      for (let c = 0; c <= cols; c++) {
+        const theta = (c / cols) * Math.PI - Math.PI / 2; // longitude (-90 to 90 deg)
+        
+        // Base sphere coordinates
+        const radius = 6.0;
+        let x = radius * Math.sin(phi) * Math.sin(theta);
+        let y = radius * Math.cos(phi) * 1.3; // slightly elongated vertically
+        let z = radius * Math.sin(phi) * Math.cos(theta);
+
+        // Apply a deformation to shape it like a stylized mask (narrow chin, high cheekbones, nose ridge)
+        if (y < 0) {
+          x *= (1.0 + y * 0.08); // chin narrowing
+        }
+        // Nose bridge protrusion
+        if (Math.abs(theta) < 0.25 && phi > 0.6 && phi < 1.8) {
+          z += 1.2 * (0.25 - Math.abs(theta));
+        }
+
+        rawVertices.push({ x, y, z });
+      }
+    }
+
+    // Connect grid vertices with triangles
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i1 = r * (cols + 1) + c;
+        const i2 = r * (cols + 1) + (c + 1);
+        const i3 = (r + 1) * (cols + 1) + c;
+        const i4 = (r + 1) * (cols + 1) + (c + 1);
+
+        // Cut out eyes and mouth regions for realism & cool cyber aesthetic!
+        const isEyeL = (r === Math.floor(rows * 0.35) && (c === Math.floor(cols * 0.3) || c === Math.floor(cols * 0.35)));
+        const isEyeR = (r === Math.floor(rows * 0.35) && (c === Math.floor(cols * 0.7) || c === Math.floor(cols * 0.65)));
+        const isMouth = (r === Math.floor(rows * 0.7) && c >= cols * 0.35 && c <= cols * 0.65);
+
+        if (isEyeL || isEyeR || isMouth) continue;
+
+        // Triangle 1
+        this.faces.push({ v1: i1, v2: i2, v3: i3 });
+        // Triangle 2
+        this.faces.push({ v1: i2, v2: i4, v3: i3 });
+      }
+    }
+
+    const scale = 24;
+    const mX = 0;
+    const mY = -2.0 * scale;
+    const mZ = 5.0 * scale;
+
+    for (const v of rawVertices) {
+      const baseX = v.x * scale;
+      const baseY = v.y * scale;
+      const baseZ = v.z * scale;
+      
+      const dx = baseX - mX;
+      const dy = baseY - mY;
+      const dz = baseZ - mZ;
+      const mouthDist = Math.sqrt(dx * dx + dy * dy * 1.4 + dz * dz * 1.5);
+      const mouthWeight = Math.max(0, 1 - mouthDist / 48);
+
+      const upperLipWeight = mouthWeight * (dy >= -2 ? Math.min(1, Math.max(0, (dy + 2) / 10)) : 0);
+      const lowerLipWeight = mouthWeight * (dy < -2 ? Math.min(1, Math.max(0, (-dy - 2) / 12)) : 0);
+      const cornerWeight = Math.abs(dx) > 10 ? mouthWeight * Math.min(1, (Math.abs(dx) - 8) / 22) : 0;
+      const jawWeight = baseY < mY - 12 ? Math.min(1, Math.max(0, (mY - 12 - baseY) / 110)) : 0;
+
+      this.vertices.push({
+        baseX, baseY, baseZ,
+        x: 0, y: 0, z: 0,
+        mouthWeight,
+        upperLipWeight,
+        lowerLipWeight,
+        cornerWeight,
+        jawWeight,
+        shatterSeed: Math.random()
+      });
+    }
+
+    this.isLoaded = true;
   }
 
   private parseObj(text: string) {
@@ -87,7 +276,9 @@ export class ObjFaceVisualizer implements IVisualizer {
       }
     }
 
-    if (rawVertices.length === 0) return;
+    if (rawVertices.length === 0) {
+      throw new Error("No vertices found in OBJ file");
+    }
 
     // Calculate center of mass for perfect rotation pivot
     let sumX = 0, sumY = 0, sumZ = 0;
@@ -170,12 +361,25 @@ export class ObjFaceVisualizer implements IVisualizer {
     const energy = audio.energy ?? 0;
 
     // Background
-    ctx.fillStyle = '#0a0a0c';
+    const bgBaseColor = settings.objFaceBgColor || '#0a0a0c';
+    ctx.fillStyle = bgBaseColor;
     ctx.fillRect(0, 0, width, height);
 
+    if (settings.objFaceBgReactive) {
+      // Create a sese duyarlı reactive glow overlay with the face color
+      const pulseOpacity = Math.min(0.25, bass * 0.15 * (settings.visBeatSensitivity ?? 1.0));
+      if (pulseOpacity > 0.01) {
+        ctx.fillStyle = settings.objFaceColor || '#4f86f7';
+        ctx.globalAlpha = pulseOpacity;
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalAlpha = 1.0;
+      }
+    }
+
     // Audio-reactive rotations
-    const targetRotX = Math.sin(audio.time * 2) * 0.15 - (bass * 0.15); // Look up slightly on bass
-    const targetRotY = Math.sin(audio.time * 0.8) * 0.25 + (interaction?.isPointerDown ? (interaction.pointerX - centerX) * 0.003 : 0);
+    const userRotation = settings.visRotation ?? 0.5;
+    const targetRotX = (Math.sin(audio.time * 2) * 0.15 - (bass * 0.15)) * userRotation;
+    const targetRotY = (Math.sin(audio.time * 0.8) * 0.25 + (interaction?.isPointerDown ? (interaction.pointerX - centerX) * 0.003 : 0)) * userRotation;
 
     this.rotX += (targetRotX - this.rotX) * 0.15;
     this.rotY += (targetRotY - this.rotY) * 0.15;
@@ -184,13 +388,14 @@ export class ObjFaceVisualizer implements IVisualizer {
     const cy = Math.cos(this.rotY), sy = Math.sin(this.rotY);
 
     const fov = 700;
-    const viewDistance = 500 - (bass * 50);
+    const viewDistance = 500 - (bass * 50 * (settings.visBeatSensitivity ?? 1.0));
 
     // 1. Transform Vertices with Anatomically Realistic Blendshapes
     const shapes = getLipSyncBlendshapes(audio, settings);
     
-    // Smooth global audio-reactive pulse (bass)
-    const globalScale = 1 + bass * 0.04;
+    // Smooth global audio-reactive pulse (bass) & scale factor
+    const userScale = settings.visScale ?? 1.0;
+    const globalScale = (1 + bass * 0.04 * (settings.visBeatSensitivity ?? 1.0)) * userScale;
 
     for (const v of this.vertices) {
       let vx = v.baseX * globalScale;
@@ -262,8 +467,9 @@ export class ObjFaceVisualizer implements IVisualizer {
       const normalY = ny;
       const normalZ = nz;
 
-      // Backface culling: only render polygons facing towards the screen/camera
-      if (normalZ <= 0) continue; 
+      // Painters algorithm handles depth sorting, so we can render double-sided or fallback safely
+      // We only cull extremely flat triangles to prevent rendering artifacts
+      if (Math.abs(normalZ) < 0.0001) continue; 
 
       const zAvg = (vA.z + vB.z + vC.z) / 3;
       
@@ -296,15 +502,53 @@ export class ObjFaceVisualizer implements IVisualizer {
     const lLen = Math.sqrt(lightDir.x**2 + lightDir.y**2 + lightDir.z**2);
     lightDir.x /= lLen; lightDir.y /= lLen; lightDir.z /= lLen;
     
-    // Noir aesthetic colors
-    const hue = 220; // Steel blue / chrome
-    const sat = 20;
+    const colorMode = settings.objFaceColorMode || 'solid';
+    const cycleSpeed = settings.objFaceCycleSpeed ?? 1.0;
+    
+    // Convert hex face color to RGB & HSL
+    const faceHex = settings.objFaceColor || '#4f86f7';
+    const faceRgb = hexToRgb(faceHex);
+    const faceHsl = rgbToHsl(faceRgb);
+
+    let currentH = faceHsl.h;
+    let currentS = faceHsl.s;
+    let currentL = faceHsl.l;
+
+    if (colorMode === 'rainbow') {
+      currentH = (audio.time * 45 * cycleSpeed) % 360;
+      currentS = 90;
+      currentL = 50;
+    } else if (colorMode === 'pulse') {
+      const pulseFactor = 0.5 + 0.5 * Math.sin(audio.time * 4 * cycleSpeed);
+      currentL = Math.max(15, Math.min(85, faceHsl.l * (0.6 + pulseFactor * 0.4)));
+    } else if (colorMode === 'glow-fade') {
+      const wave = Math.sin(audio.time * 2.5 * cycleSpeed);
+      currentH = (faceHsl.h + wave * 25 + 360) % 360;
+      currentS = Math.max(20, Math.min(100, faceHsl.s * (0.7 + (wave + 1) * 0.15)));
+    } else if (colorMode === 'audio') {
+      const sens = settings.visBeatSensitivity ?? 1.0;
+      currentH = (faceHsl.h + (bass * 40 * sens * cycleSpeed)) % 360;
+      currentS = Math.max(30, Math.min(100, faceHsl.s * (0.8 + energy * 0.4 * sens)));
+      currentL = Math.max(20, Math.min(85, faceHsl.l * (0.9 + energy * 0.25 * sens)));
+    }
+
+    // Convert dynamic HSL back to RGB so we can apply precise lighting/shading
+    const dynamicBaseRgb = hslToRgb({ h: currentH, s: currentS, l: currentL });
+
+    const glowMultiplier = settings.visGlow ?? 0.5;
 
     for (const t of triangles) {
       const nLen = Math.sqrt(t.nx**2 + t.ny**2 + t.nz**2) || 1;
       let nx = t.nx / nLen;
       let ny = t.ny / nLen;
       let nz = t.nz / nLen;
+
+      // Ensure normal points towards the viewer for correct shading of double-sided triangles
+      if (nz < 0) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+      }
 
       // Specular & Diffuse
       const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
@@ -314,7 +558,17 @@ export class ObjFaceVisualizer implements IVisualizer {
       const viewDot = nz; // Camera looks down -Z
       const fresnel = Math.pow(1 - Math.max(0, viewDot), 3);
       
-      const lit = 5 + (diffuse * 35) + (fresnel * 40) + (energy * 15);
+      // Shading factor represents environmental lighting multiplier (ambient + diffuse + fresnel glow + audio power)
+      const ambient = 0.20;
+      const diffuseIntensity = diffuse * 0.50;
+      const fresnelIntensity = fresnel * 0.30;
+      const audioPulse = energy * 0.15 * (settings.visBeatSensitivity ?? 1.0);
+      const shadeFactor = ambient + diffuseIntensity + fresnelIntensity + audioPulse;
+
+      // Calculate accurate shaded color in RGB space! This guarantees exact hue and saturation matching
+      const finalR = Math.min(255, Math.round(dynamicBaseRgb.r * shadeFactor));
+      const finalG = Math.min(255, Math.round(dynamicBaseRgb.g * shadeFactor));
+      const finalB = Math.min(255, Math.round(dynamicBaseRgb.b * shadeFactor));
 
       ctx.beginPath();
       ctx.moveTo(t.pA.x, t.pA.y);
@@ -322,12 +576,16 @@ export class ObjFaceVisualizer implements IVisualizer {
       ctx.lineTo(t.pC.x, t.pC.y);
       ctx.closePath();
 
-      // Flat shading fill (solid metallic)
-      ctx.fillStyle = `hsl(${hue}, ${sat}%, ${lit}%)`;
+      // Shaded face fill
+      ctx.fillStyle = `rgb(${finalR}, ${finalG}, ${finalB})`;
       ctx.fill();
 
-      // Clean wireframe
-      ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${lit + 40}%, 0.6)`;
+      // Slightly brighter wireframe with custom glow opacity
+      const wireR = Math.min(255, Math.round(dynamicBaseRgb.r * (shadeFactor + 0.25)));
+      const wireG = Math.min(255, Math.round(dynamicBaseRgb.g * (shadeFactor + 0.25)));
+      const wireB = Math.min(255, Math.round(dynamicBaseRgb.b * (shadeFactor + 0.25)));
+
+      ctx.strokeStyle = `rgba(${wireR}, ${wireG}, ${wireB}, ${glowMultiplier * 1.2})`;
       ctx.lineWidth = 0.5;
       ctx.stroke();
     }

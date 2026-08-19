@@ -2,12 +2,14 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { VisualizerSettings, AudioEvents } from '../src/types';
 import { StudioRenderer } from '../src/core/Renderer';
 import { OfflineAudioProcessor } from '../src/core/AudioAnalysisEngine';
 
 export interface RenderJob {
   id: string;
+  ownerToken: string;
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   stage: string;
@@ -41,6 +43,9 @@ export interface StartRenderPayload {
 }
 
 const jobs = new Map<string, RenderJob>();
+const renderQueue: { jobId: string; payload: StartRenderPayload }[] = [];
+let activeRendersCount = 0;
+const MAX_CONCURRENT_RENDERS = 2; // Stabilite ve CPU kilitlenmesini önleme limiti
 
 // Temp ve Render çıktı klasörlerini hazırla
 const TEMP_DIR = path.join(process.cwd(), 'temp_renders');
@@ -48,22 +53,36 @@ if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
-// Eski dosyaları periyodik olarak temizle (1 saatten eski)
+// Otomatik 15 dakikalık disk ve temp dosya temizleme rutini (20 dakikadan eski dosyalar)
 setInterval(() => {
   try {
     const now = Date.now();
+    // 1. İş kayıtlarını temizle
     for (const [id, job] of jobs.entries()) {
-      if (now - job.createdAt > 60 * 60 * 1000) {
+      if (now - job.createdAt > 30 * 60 * 1000) {
         if (job.outputPath && fs.existsSync(job.outputPath)) {
           try { fs.unlinkSync(job.outputPath); } catch (_) {}
         }
         jobs.delete(id);
       }
     }
+    // 2. Temp klasöründeki yetim / geçici dosyaları süpür
+    if (fs.existsSync(TEMP_DIR)) {
+      const files = fs.readdirSync(TEMP_DIR);
+      for (const file of files) {
+        const fullPath = path.join(TEMP_DIR, file);
+        try {
+          const stats = fs.statSync(fullPath);
+          if (now - stats.mtimeMs > 20 * 60 * 1000) {
+            fs.unlinkSync(fullPath);
+          }
+        } catch (_) {}
+      }
+    }
   } catch (err) {
-    console.warn('Temp cleanup warning:', err);
+    console.warn('Temp disk cleanup warning:', err);
   }
-}, 10 * 60 * 1000);
+}, 15 * 60 * 1000);
 
 export function getRenderJob(id: string): RenderJob | undefined {
   return jobs.get(id);
@@ -71,25 +90,42 @@ export function getRenderJob(id: string): RenderJob | undefined {
 
 export function cancelRenderJob(id: string): boolean {
   const job = jobs.get(id);
-  if (job && job.status === 'processing' && job.cancel) {
-    job.cancel();
+  // Kuyruktaysa kuyruktan çıkar
+  const qIdx = renderQueue.findIndex(q => q.jobId === id);
+  if (qIdx !== -1) {
+    renderQueue.splice(qIdx, 1);
+  }
+
+  if (job && (job.status === 'processing' || job.status === 'queued')) {
+    const wasProcessing = job.status === 'processing';
+    if (job.cancel) {
+      job.cancel();
+    }
     job.status = 'cancelled';
     job.stage = 'Kullanıcı tarafından iptal edildi';
+    if (wasProcessing) {
+      activeRendersCount = Math.max(0, activeRendersCount - 1);
+      processNextQueueItem();
+    }
     return true;
   }
   return false;
 }
 
-export async function createRenderJob(payload: StartRenderPayload): Promise<string> {
+export async function createRenderJob(payload: StartRenderPayload): Promise<{ jobId: string; ownerToken: string }> {
   const jobId = `render_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const ownerToken = crypto.randomBytes(24).toString('hex');
   const fps = payload.fps || 30; // 30 FPS yüksek stabilite ve akıcılık
   const settings = payload.settings;
 
   const job: RenderJob = {
     id: jobId,
+    ownerToken,
     status: 'queued',
     progress: 0,
-    stage: 'Render kuyruğa alındı...',
+    stage: activeRendersCount >= MAX_CONCURRENT_RENDERS 
+      ? `Render kuyrukta bekliyor (Sıra: ${renderQueue.length + 1})...` 
+      : 'Render başlatılıyor...',
     currentFrame: 0,
     totalFrames: 0,
     outputPath: null,
@@ -102,19 +138,43 @@ export async function createRenderJob(payload: StartRenderPayload): Promise<stri
   };
 
   jobs.set(jobId, job);
+  renderQueue.push({ jobId, payload });
 
-  // Arka planda asenkron olarak render işlemini başlat
-  processRenderJob(jobId, payload).catch((err) => {
-    console.error(`Render Job ${jobId} failed:`, err);
-    const j = jobs.get(jobId);
-    if (j) {
-      j.status = 'failed';
-      j.error = err?.message || 'Bilinmeyen render hatası';
-      j.stage = `Hata: ${j.error}`;
-    }
-  });
+  processNextQueueItem();
 
-  return jobId;
+  return { jobId, ownerToken };
+}
+
+function processNextQueueItem() {
+  if (activeRendersCount >= MAX_CONCURRENT_RENDERS || renderQueue.length === 0) {
+    return;
+  }
+
+  const nextItem = renderQueue.shift();
+  if (!nextItem) return;
+
+  const job = jobs.get(nextItem.jobId);
+  if (!job || job.status === 'cancelled') {
+    processNextQueueItem();
+    return;
+  }
+
+  activeRendersCount++;
+
+  processRenderJob(nextItem.jobId, nextItem.payload)
+    .catch((err) => {
+      console.error(`Render Job ${nextItem.jobId} failed:`, err);
+      const j = jobs.get(nextItem.jobId);
+      if (j) {
+        j.status = 'failed';
+        j.error = err?.message || 'Bilinmeyen render hatası';
+        j.stage = `Hata: ${j.error}`;
+      }
+    })
+    .finally(() => {
+      activeRendersCount = Math.max(0, activeRendersCount - 1);
+      processNextQueueItem();
+    });
 }
 
 async function processRenderJob(jobId: string, payload: StartRenderPayload) {
@@ -154,6 +214,18 @@ async function processRenderJob(jobId: string, payload: StartRenderPayload) {
       }
       const remoteBuffer = Buffer.from(await remoteRes.arrayBuffer());
       fs.writeFileSync(tempAudioPath, remoteBuffer);
+    } else if (payload.audioRemoteUrl) {
+      // Yerel dosya yolu desteği (örn. /demo-items/MESELE.flac)
+      const cleanPath = payload.audioRemoteUrl.replace(/^\//, '');
+      const localPublicPath = path.join(process.cwd(), 'public', cleanPath);
+      const localDirectPath = path.join(process.cwd(), cleanPath);
+      if (fs.existsSync(localPublicPath)) {
+        fs.copyFileSync(localPublicPath, tempAudioPath);
+      } else if (fs.existsSync(localDirectPath)) {
+        fs.copyFileSync(localDirectPath, tempAudioPath);
+      } else {
+        throw new Error(`Yerel ses dosyası bulunamadı: ${payload.audioRemoteUrl}`);
+      }
     } else if (payload.audioBase64) {
       let audioBuffer: Buffer;
       if (payload.audioBase64.includes(',')) {

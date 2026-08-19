@@ -216,29 +216,29 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
       {/* TOAST BİLDİRİMİ */}
       {toastMessage && (
         <div className={cn(
-          "fixed bottom-6 right-6 z-50 px-4 py-3 border font-mono text-xs shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2",
-          toastMessage.type === 'success' ? "bg-zinc-950 border-[#FFD700] text-[#FFD700]" :
+          "fixed bottom-6 right-6 z-50 px-4 py-3 border font-sans text-xs shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2",
+          toastMessage.type === 'success' ? "bg-panel border-accent text-accent" :
           toastMessage.type === 'error' ? "bg-red-950 border-red-500 text-red-300" :
-          "bg-zinc-900 border-zinc-700 text-zinc-200"
+          "bg-surface border-border-strong text-content-primary"
         )}>
-          {toastMessage.type === 'success' ? <CheckCircle2 size={16} className="text-[#FFD700]" /> : <AlertCircle size={16} />}
+          {toastMessage.type === 'success' ? <CheckCircle2 size={16} className="text-accent" /> : <AlertCircle size={16} />}
           <span>{toastMessage.text}</span>
         </div>
       )}
 
       {/* HIZLI PROFİL ERİŞİM ÇUBUĞU (QUICK RECALL BAR) */}
-      <div className="bg-black/40 border border-white/[0.08] p-4 rounded-sm space-y-3">
+      <div className="bg-panel border border-white/[0.08] p-4 rounded-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
           <div className="flex items-center gap-2">
-            <Bookmark className="w-4 h-4 text-[#FFD700]" />
+            <Bookmark className="w-4 h-4 text-accent" />
             <div>
-              <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-white flex items-center gap-2">
+              <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-content-primary flex items-center gap-2">
                 KONFİGÜRASYON PROFİLLERİ & PRESETLER
-                <span className="text-[8px] bg-[#FFD700]/20 text-[#FFD700] px-1.5 py-0.2 font-mono rounded">
+                <span className="text-[8px] bg-accent/20 text-accent px-1.5 py-0.2 font-sans rounded">
                   {profiles.length} KAYITLI
                 </span>
               </h3>
-              <p className="text-[8.5px] text-zinc-500 font-mono">
+              <p className="text-[8.5px] text-content-tertiary font-sans">
                 Visualizer, renk ve shader ayarlarınızı profil olarak kaydedin ve geri çağırın.
               </p>
             </div>
@@ -251,9 +251,9 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                 type="button"
                 onClick={handleOverwriteActive}
                 title={`Mevcut ayarları "${activeProfile.name}" profiline kaydet`}
-                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-surface hover:bg-hover text-content-secondary hover:text-content-primary border border-border-strong text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Save size={12} className="text-[#FFD700]" />
+                <Save size={12} className="text-accent" />
                 <span>GÜNCELLE</span>
               </button>
             )}
@@ -266,7 +266,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                 setNewProfileDesc('');
                 setIsSaveModalOpen(true);
               }}
-              className="px-3 py-1.5 bg-[#FFD700] hover:bg-white text-black text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(255,215,0,0.2)] cursor-pointer"
+              className="px-3 py-1.5 bg-accent hover:bg-white text-black text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(255,215,0,0.2)] cursor-pointer"
             >
               <Plus size={13} />
               <span>YENİ PROFİL KAYDET</span>
@@ -276,7 +276,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-[#FFD700] border border-zinc-800 hover:border-[#FFD700] text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-surface hover:bg-hover text-content-secondary hover:text-accent border border-border-strong hover:border-accent text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Layers size={13} />
               <span>TÜMÜNÜ YÖNET</span>
@@ -296,8 +296,8 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                 className={cn(
                   "p-2.5 text-left border transition-all flex flex-col justify-between min-h-[58px] cursor-pointer group relative overflow-hidden",
                   isSelected
-                    ? "bg-[#FFD700] text-black border-[#FFD700] font-black shadow-[0_0_15px_rgba(255,215,0,0.2)]"
-                    : "bg-black text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-900/60"
+                    ? "bg-accent text-black border-accent font-black shadow-[0_0_15px_rgba(255,215,0,0.2)]"
+                    : "bg-panel text-content-secondary border-border-strong hover:border-zinc-600 hover:bg-surface/60"
                 )}
               >
                 <div className="flex items-center justify-between w-full">
@@ -316,8 +316,8 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
 
                 <div className="flex items-center justify-between w-full mt-1.5">
                   <span className={cn(
-                    "text-[7.5px] font-mono uppercase truncate",
-                    isSelected ? "text-zinc-900 font-bold" : "text-zinc-500"
+                    "text-[7.5px] font-sans uppercase truncate",
+                    isSelected ? "text-zinc-900 font-bold" : "text-content-tertiary"
                   )}>
                     {prof.settings.mode || 'STANDART'}
                   </span>
@@ -333,18 +333,18 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
 
       {/* YENİ PROFİL KAYDETME MODALI */}
       {isSaveModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-[#FFD700]/60 p-6 max-w-md w-full shadow-[0_0_40px_rgba(0,0,0,0.8)] space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div className="fixed inset-0 z-50 bg-panel/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-accent/60 p-6 max-w-md w-full shadow-[0_0_40px_rgba(0,0,0,0.8)] space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-border-strong pb-3">
               <div className="flex items-center gap-2">
-                <BookmarkCheck className="w-5 h-5 text-[#FFD700]" />
-                <h3 className="text-xs font-black uppercase tracking-widest text-white">
+                <BookmarkCheck className="w-5 h-5 text-accent" />
+                <h3 className="text-xs font-black uppercase tracking-widest text-content-primary">
                   YENİ PROFİL OLARAK KAYDET
                 </h3>
               </div>
               <button 
                 onClick={() => setIsSaveModalOpen(false)}
-                className="text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                className="text-content-tertiary hover:text-content-primary transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -352,7 +352,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
 
             <form onSubmit={handleSaveNew} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest block">
+                <label className="text-[9px] font-sans text-content-secondary uppercase tracking-widest block">
                   PROFİL ADI:
                 </label>
                 <input
@@ -362,12 +362,12 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                   placeholder="Örn: Ağır Bas Cyberpunk, Sinematik Retro..."
                   value={newProfileName}
                   onChange={(e) => setNewProfileName(e.target.value)}
-                  className="w-full bg-black border border-zinc-700 p-2.5 text-xs text-white uppercase font-bold focus:border-[#FFD700] outline-none"
+                  className="w-full bg-panel border border-border-strong p-2.5 text-xs text-content-primary uppercase font-bold focus:border-accent outline-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest block">
+                <label className="text-[9px] font-sans text-content-secondary uppercase tracking-widest block">
                   AÇIKLAMA / NOT (İSTEĞE BAĞLI):
                 </label>
                 <input
@@ -375,24 +375,24 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                   placeholder="Örn: 80ler kaset greni ve neon ışıklar"
                   value={newProfileDesc}
                   onChange={(e) => setNewProfileDesc(e.target.value)}
-                  className="w-full bg-black border border-zinc-700 p-2.5 text-xs text-zinc-300 focus:border-[#FFD700] outline-none"
+                  className="w-full bg-panel border border-border-strong p-2.5 text-xs text-content-secondary focus:border-accent outline-none"
                 />
               </div>
 
               {/* Mevcut Ayar Özeti */}
-              <div className="bg-zinc-950 border border-zinc-800/80 p-3 space-y-1.5 text-[9px] font-mono">
-                <div className="text-zinc-400 uppercase font-bold">KAYDEDİLECEK AYAR ÖZETİ:</div>
-                <div className="flex flex-wrap gap-2 text-zinc-500">
-                  <span className="bg-zinc-900 px-1.5 py-0.5 border border-zinc-800 text-zinc-300">
+              <div className="bg-panel border border-border-strong p-3 space-y-1.5 text-[9px] font-sans">
+                <div className="text-content-secondary uppercase font-bold">KAYDEDİLECEK AYAR ÖZETİ:</div>
+                <div className="flex flex-wrap gap-2 text-content-tertiary">
+                  <span className="bg-surface px-1.5 py-0.5 border border-border-strong text-content-secondary">
                     Mod: {currentSettings.mode}
                   </span>
-                  <span className="bg-zinc-900 px-1.5 py-0.5 border border-zinc-800 text-zinc-300">
+                  <span className="bg-surface px-1.5 py-0.5 border border-border-strong text-content-secondary">
                     Oran: {currentSettings.aspectRatio}
                   </span>
-                  <span className="bg-zinc-900 px-1.5 py-0.5 border border-zinc-800 text-zinc-300">
+                  <span className="bg-surface px-1.5 py-0.5 border border-border-strong text-content-secondary">
                     Aktif FX: {getActiveFxCount(currentSettings)} adet
                   </span>
-                  <span className="bg-zinc-900 px-1.5 py-0.5 border border-zinc-800 text-zinc-300 flex items-center gap-1">
+                  <span className="bg-surface px-1.5 py-0.5 border border-border-strong text-content-secondary flex items-center gap-1">
                     Renk: <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: currentSettings.primaryColor }} />
                   </span>
                 </div>
@@ -402,13 +402,13 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsSaveModalOpen(false)}
-                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase tracking-wider border border-zinc-800 cursor-pointer"
+                  className="px-4 py-2 bg-surface hover:bg-hover text-content-secondary text-[10px] font-black uppercase tracking-wider border border-border-strong cursor-pointer"
                 >
                   İPTAL
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#FFD700] hover:bg-white text-black text-[10px] font-black uppercase tracking-wider cursor-pointer shadow-[0_0_15px_rgba(255,215,0,0.3)] transition-all"
+                  className="px-5 py-2 bg-accent hover:bg-white text-black text-[10px] font-black uppercase tracking-wider cursor-pointer shadow-[0_0_15px_rgba(255,215,0,0.3)] transition-all"
                 >
                   PROFİLİ KAYDET
                 </button>
@@ -420,17 +420,17 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
 
       {/* TÜM PROFİLLERİ YÖNETME MODALI (FULL PRESET MANAGER) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
-          <div className="bg-[#080808] border border-zinc-700 max-w-4xl w-full max-h-[90vh] flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.9)] animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-panel/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-[#080808] border border-border-strong max-w-4xl w-full max-h-[90vh] flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.9)] animate-in zoom-in-95">
             {/* Header */}
-            <div className="p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
+            <div className="p-5 border-b border-border-strong flex items-center justify-between bg-panel">
               <div className="flex items-center gap-3">
-                <Layers className="w-5 h-5 text-[#FFD700]" />
+                <Layers className="w-5 h-5 text-accent" />
                 <div>
-                  <h2 className="text-sm font-black tracking-widest uppercase text-white">
+                  <h2 className="text-sm font-black tracking-widest uppercase text-content-primary">
                     PROFİL VE PRESET YÖNETİCİSİ
                   </h2>
-                  <p className="text-[10px] text-zinc-500 font-mono">
+                  <p className="text-[10px] text-content-tertiary font-sans">
                     Kayıtlı profilleri inceleyin, düzenleyin, dışa/içe aktarın.
                   </p>
                 </div>
@@ -438,22 +438,22 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
 
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="text-zinc-400 hover:text-white p-1 transition-colors cursor-pointer"
+                className="text-content-secondary hover:text-content-primary p-1 transition-colors cursor-pointer"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* Arama & Dışa/İçe Aktarma Araç Çubuğu */}
-            <div className="p-4 border-b border-zinc-800/80 bg-black flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="p-4 border-b border-border-strong bg-panel flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="relative flex-1">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-content-tertiary" />
                 <input
                   type="text"
                   placeholder="Profil adı veya visualizer modu ile ara..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 pl-9 pr-3 py-2 text-xs text-white font-mono placeholder:text-zinc-600 focus:border-[#FFD700] outline-none"
+                  className="w-full bg-panel border border-border-strong pl-9 pr-3 py-2 text-xs text-content-primary font-sans placeholder:text-content-tertiary focus:border-accent outline-none"
                 />
               </div>
 
@@ -462,7 +462,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                 <button
                   type="button"
                   onClick={handleExportJSON}
-                  className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[9px] font-mono uppercase flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="px-3 py-2 bg-surface hover:bg-hover text-content-secondary hover:text-content-primary border border-border-strong text-[9px] font-sans uppercase flex items-center gap-1.5 cursor-pointer transition-colors"
                   title="Profilleri JSON dosyası olarak indir"
                 >
                   <Download size={12} />
@@ -473,7 +473,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[9px] font-mono uppercase flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="px-3 py-2 bg-surface hover:bg-hover text-content-secondary hover:text-content-primary border border-border-strong text-[9px] font-sans uppercase flex items-center gap-1.5 cursor-pointer transition-colors"
                   title="JSON dosyasından profil yükle"
                 >
                   <Upload size={12} />
@@ -491,7 +491,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                 <button
                   type="button"
                   onClick={handleResetDefaults}
-                  className="px-3 py-2 bg-zinc-950 hover:bg-red-950/40 text-zinc-500 hover:text-red-400 border border-zinc-800 hover:border-red-900 text-[9px] font-mono uppercase flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="px-3 py-2 bg-panel hover:bg-red-950/40 text-content-tertiary hover:text-red-400 border border-border-strong hover:border-red-900 text-[9px] font-sans uppercase flex items-center gap-1.5 cursor-pointer transition-colors"
                   title="Tüm profilleri varsayılana döndür"
                 >
                   <RefreshCw size={12} />
@@ -503,7 +503,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
             {/* Profil Listesi */}
             <div className="p-5 overflow-y-auto flex-1 space-y-3 custom-scrollbar">
               {filteredProfiles.length === 0 ? (
-                <div className="text-center py-12 text-zinc-600 font-mono text-xs">
+                <div className="text-center py-12 text-content-tertiary font-sans text-xs">
                   Aramanıza uygun profil bulunamadı.
                 </div>
               ) : (
@@ -518,8 +518,8 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                         className={cn(
                           "border p-4 transition-all flex flex-col justify-between gap-3 relative",
                           isSelected
-                            ? "bg-zinc-950 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.1)]"
-                            : "bg-[#050505] border-zinc-800/90 hover:border-zinc-700"
+                            ? "bg-panel border-accent shadow-[0_0_20px_rgba(255,215,0,0.1)]"
+                            : "bg-[#050505] border-border-strong/90 hover:border-border-strong"
                         )}
                       >
                         {/* Üst Kısım: İsim, Tip ve Rozetler */}
@@ -530,27 +530,27 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                                 type="text"
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
-                                className="w-full bg-black border border-[#FFD700] p-1.5 text-xs text-white font-bold uppercase"
+                                className="w-full bg-panel border border-accent p-1.5 text-xs text-content-primary font-bold uppercase"
                               />
                               <input
                                 type="text"
                                 placeholder="Açıklama..."
                                 value={editDesc}
                                 onChange={(e) => setEditDesc(e.target.value)}
-                                className="w-full bg-black border border-zinc-700 p-1.5 text-[10px] text-zinc-300"
+                                className="w-full bg-panel border border-border-strong p-1.5 text-[10px] text-content-secondary"
                               />
                               <div className="flex gap-2 justify-end">
                                 <button
                                   type="button"
                                   onClick={() => setEditingProfileId(null)}
-                                  className="px-2 py-1 text-[8px] font-mono uppercase bg-zinc-900 text-zinc-400 border border-zinc-700"
+                                  className="px-2 py-1 text-[8px] font-sans uppercase bg-surface text-content-secondary border border-border-strong"
                                 >
                                   İptal
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleSaveEdit(prof.id)}
-                                  className="px-2 py-1 text-[8px] font-mono uppercase bg-[#FFD700] text-black font-bold"
+                                  className="px-2 py-1 text-[8px] font-sans uppercase bg-accent text-black font-bold"
                                 >
                                   Kaydet
                                 </button>
@@ -560,22 +560,22 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                                  <h4 className="text-xs font-black uppercase tracking-wider text-content-primary">
                                     {prof.name}
                                   </h4>
                                   {prof.isBuiltin && (
-                                    <span className="text-[7px] font-mono bg-zinc-800 text-zinc-400 px-1 py-0.2 uppercase border border-zinc-700">
+                                    <span className="text-[7px] font-sans bg-hover text-content-secondary px-1 py-0.2 uppercase border border-border-strong">
                                       YERLEŞİK
                                     </span>
                                   )}
                                   {isSelected && (
-                                    <span className="text-[7px] font-mono bg-[#FFD700] text-black px-1.5 py-0.2 font-bold uppercase">
+                                    <span className="text-[7px] font-sans bg-accent text-black px-1.5 py-0.2 font-bold uppercase">
                                       AKTİF
                                     </span>
                                   )}
                                 </div>
                                 {prof.description && (
-                                  <p className="text-[9px] text-zinc-400 font-mono mt-0.5">
+                                  <p className="text-[9px] text-content-secondary font-sans mt-0.5">
                                     {prof.description}
                                   </p>
                                 )}
@@ -602,25 +602,25 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
 
                           {/* Parametre Rozetleri */}
                           <div className="flex flex-wrap gap-1.5 mt-2.5">
-                            <span className="text-[8px] font-mono bg-black text-zinc-400 border border-zinc-800 px-1.5 py-0.5">
-                              MOD: <b className="text-zinc-200">{prof.settings.mode || 'STANDART'}</b>
+                            <span className="text-[8px] font-sans bg-panel text-content-secondary border border-border-strong px-1.5 py-0.5">
+                              MOD: <b className="text-content-primary">{prof.settings.mode || 'STANDART'}</b>
                             </span>
-                            <span className="text-[8px] font-mono bg-black text-zinc-400 border border-zinc-800 px-1.5 py-0.5">
-                              ORAN: <b className="text-zinc-200">{prof.settings.aspectRatio || '16/9'}</b>
+                            <span className="text-[8px] font-sans bg-panel text-content-secondary border border-border-strong px-1.5 py-0.5">
+                              ORAN: <b className="text-content-primary">{prof.settings.aspectRatio || '16/9'}</b>
                             </span>
-                            <span className="text-[8px] font-mono bg-black text-zinc-400 border border-zinc-800 px-1.5 py-0.5">
-                              FX: <b className="text-[#FFD700]">{getActiveFxCount(prof.settings)}</b>
+                            <span className="text-[8px] font-sans bg-panel text-content-secondary border border-border-strong px-1.5 py-0.5">
+                              FX: <b className="text-accent">{getActiveFxCount(prof.settings)}</b>
                             </span>
                             {prof.settings.visSpeed && (
-                              <span className="text-[8px] font-mono bg-black text-zinc-400 border border-zinc-800 px-1.5 py-0.5">
-                                HIZ: <b className="text-zinc-200">{prof.settings.visSpeed}x</b>
+                              <span className="text-[8px] font-sans bg-panel text-content-secondary border border-border-strong px-1.5 py-0.5">
+                                HIZ: <b className="text-content-primary">{prof.settings.visSpeed}x</b>
                               </span>
                             )}
                           </div>
                         </div>
 
                         {/* Alt Butonlar */}
-                        <div className="flex items-center justify-between border-t border-zinc-900 pt-3 mt-1">
+                        <div className="flex items-center justify-between border-t border-border-subtle pt-3 mt-1">
                           <div className="flex items-center gap-2">
                             {!isEditing && (
                               <button
@@ -630,7 +630,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                                   setEditName(prof.name);
                                   setEditDesc(prof.description || '');
                                 }}
-                                className="text-zinc-500 hover:text-zinc-300 text-[9px] font-mono uppercase flex items-center gap-1 cursor-pointer transition-colors"
+                                className="text-content-tertiary hover:text-content-secondary text-[9px] font-sans uppercase flex items-center gap-1 cursor-pointer transition-colors"
                               >
                                 <Edit3 size={11} />
                                 <span>YENİDEN ADLANDIR</span>
@@ -641,7 +641,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleDelete(prof.id, prof.name)}
-                                className="text-zinc-600 hover:text-red-400 text-[9px] font-mono uppercase flex items-center gap-1 cursor-pointer transition-colors ml-2"
+                                className="text-content-tertiary hover:text-red-400 text-[9px] font-sans uppercase flex items-center gap-1 cursor-pointer transition-colors ml-2"
                               >
                                 <Trash2 size={11} />
                                 <span>SİL</span>
@@ -658,8 +658,8 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                             className={cn(
                               "px-3 py-1.5 text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer",
                               isSelected
-                                ? "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-                                : "bg-[#FFD700] hover:bg-white text-black font-black shadow-[0_0_10px_rgba(255,215,0,0.2)]"
+                                ? "bg-hover text-content-secondary hover:bg-hover"
+                                : "bg-accent hover:bg-white text-black font-black shadow-[0_0_10px_rgba(255,215,0,0.2)]"
                             )}
                           >
                             {isSelected ? <Check size={12} /> : <Sparkles size={12} />}
@@ -674,12 +674,12 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+            <div className="p-4 border-t border-border-strong bg-panel flex items-center justify-between text-[10px] font-sans text-content-tertiary">
               <span>Toplam {profiles.length} profil kayıtlı.</span>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 uppercase font-black text-[9px] border border-zinc-800 cursor-pointer"
+                className="px-4 py-1.5 bg-surface hover:bg-hover text-content-secondary uppercase font-black text-[9px] border border-border-strong cursor-pointer"
               >
                 KAPAT
               </button>

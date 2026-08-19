@@ -21,11 +21,22 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
     private loadingError: string | null = null;
     private baseHeadPos: THREE.Vector3 = new THREE.Vector3(0, 1.35, 0);
 
+    private lastAvatarMode: string | null = null;
+    private originalMaterialProps = new Map<string, {
+        transparent: boolean;
+        depthWrite: boolean;
+        blending: THREE.Blending;
+        side: THREE.Side;
+    }>();
+
     private customUniforms = {
         uTime: { value: 0 },
         uBass: { value: 0 },
         uMid: { value: 0 },
-        uTreble: { value: 0 }
+        uTreble: { value: 0 },
+        uIsHologram: { value: 0.0 },
+        uGlow: { value: 0.5 },
+        uEnergy: { value: 0 }
     };
 
     constructor() {
@@ -58,11 +69,7 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
         this.loadingError = null;
 
         // Clean up previous VRM
-        if (this.vrm) {
-            this.scene.remove(this.vrm.scene);
-            this.vrm = null;
-            this.talkingHead = null;
-        }
+        this.cleanUpVRM();
 
         const loader = new GLTFLoader();
         loader.register((parser) => {
@@ -71,15 +78,24 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
 
         const setupVRM = (vrm: VRM) => {
             this.vrm = vrm;
-            this.talkingHead = new TalkingHead(vrm);
             this.scene.add(vrm.scene);
-            this.isLoaded = true;
-            this.isLoading = false;
-            this.loadingError = null;
             
             // Standard VRM models face +Z, camera is at +Z looking at 0, 
             // so rotation.y = Math.PI makes the character face the camera.
             vrm.scene.rotation.y = Math.PI; 
+            
+            // Force world matrix update before calibration/position queries
+            vrm.scene.updateMatrixWorld(true);
+
+            this.talkingHead = new TalkingHead(vrm);
+            this.isLoaded = true;
+            this.isLoading = false;
+            this.loadingError = null;
+            
+            if (vrm.lookAt) {
+                vrm.lookAt.target = this.camera;
+                vrm.lookAt.autoUpdate = true;
+            }
             
             // Auto-focus camera on the character head & store base head position
             if (vrm.humanoid) {
@@ -115,24 +131,105 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
                                 shader.uniforms.uBass = this.customUniforms.uBass;
                                 shader.uniforms.uMid = this.customUniforms.uMid;
                                 shader.uniforms.uTreble = this.customUniforms.uTreble;
+                                shader.uniforms.uIsHologram = this.customUniforms.uIsHologram;
+                                shader.uniforms.uGlow = this.customUniforms.uGlow;
+                                shader.uniforms.uEnergy = this.customUniforms.uEnergy;
 
                                 shader.vertexShader = `
                                     uniform float uTime;
                                     uniform float uBass;
                                     uniform float uTreble;
+                                    varying vec3 vHoloWorldPosition;
+                                    varying vec3 vHoloNormal;
+                                    varying vec3 vHoloViewPosition;
                                 ` + shader.vertexShader;
 
                                 shader.vertexShader = shader.vertexShader.replace(
                                     '#include <begin_vertex>',
                                     `
                                     #include <begin_vertex>
+                                    // Audio-reactive siberpunk procedural wave deformation
+                                    float wave = sin(position.y * 10.0 + uTime * 5.0) * cos(position.x * 10.0 + uTime * 5.0);
+                                    transformed.x += wave * 0.012 * uBass;
+                                    transformed.y += sin(position.z * 15.0 + uTime * 6.0) * 0.006 * uTreble;
+                                    transformed.z += wave * 0.012 * uBass;
                                     `
                                 );
+
+                                shader.vertexShader = shader.vertexShader.replace(
+                                    '#include <project_vertex>',
+                                    `
+                                    #include <project_vertex>
+                                    vHoloWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                                    vHoloNormal = normalize(normalMatrix * normal);
+                                    vHoloViewPosition = -mvPosition.xyz;
+                                    `
+                                );
+
+                                shader.fragmentShader = `
+                                    uniform float uTime;
+                                    uniform float uBass;
+                                    uniform float uEnergy;
+                                    uniform float uGlow;
+                                    uniform float uIsHologram;
+                                    varying vec3 vHoloWorldPosition;
+                                    varying vec3 vHoloNormal;
+                                    varying vec3 vHoloViewPosition;
+                                ` + shader.fragmentShader;
+
+                                const lastBraceIndex = shader.fragmentShader.lastIndexOf('}');
+                                if (lastBraceIndex !== -1) {
+                                    shader.fragmentShader = shader.fragmentShader.substring(0, lastBraceIndex) + `
+                                    if (uIsHologram > 0.5) {
+                                        vec3 normal = normalize(vHoloNormal);
+                                        vec3 viewDir = normalize(vHoloViewPosition);
+                                        
+                                        // Fresnel (Edge glow)
+                                        float fresnel = pow(1.0 - max(0.0, dot(viewDir, normal)), 2.8);
+                                        
+                                        // Primary scanline: slow-scrolling main bands
+                                        float scanline1 = sin(vHoloWorldPosition.y * 140.0 - uTime * 4.0) * 0.5 + 0.5;
+                                        
+                                        // Secondary scanline: fast-scrolling tiny lines
+                                        float scanline2 = sin(vHoloWorldPosition.y * 450.0 + uTime * 12.0) * 0.25 + 0.75;
+                                        
+                                        // Combine scanlines
+                                        float scanlines = scanline1 * scanline2;
+                                        
+                                        // Subtle beat-reactive flicker
+                                        float flicker = 0.92 + 0.08 * fract(sin(uTime * 15.0) * 43758.5453123) + (uBass * 0.05);
+                                        
+                                        // Core transparency (face of the model is semi-transparent, edges are glowing)
+                                        float alpha = (0.20 + fresnel * 0.80) * scanlines * flicker;
+                                        
+                                        // Base hologram blue/cyan color
+                                        vec3 baseColor = vec3(0.0, 0.88, 1.0); // Neon Cyan
+                                        
+                                        // Additive depth glow color
+                                        vec3 glowColor = vec3(0.0, 0.45, 1.0) * (1.0 + uBass * 0.3); // Deep blue pulse
+                                        
+                                        // Mix colors based on fresnel and scanlines
+                                        vec3 finalColor = mix(glowColor, baseColor, fresnel + 0.25) * (1.0 + fresnel * 0.6);
+                                        
+                                        // Incorporate custom glow slider
+                                        finalColor *= (0.5 + uGlow * 1.5);
+                                        alpha *= (0.3 + uGlow * 1.2);
+                                        
+                                        // Add a very subtle grid effect
+                                        float verticalLine = sin(vHoloWorldPosition.x * 60.0) * 0.1 + 0.9;
+                                        finalColor *= verticalLine;
+                                        
+                                        gl_FragColor = vec4(finalColor, alpha);
+                                    }
+                                    ` + shader.fragmentShader.substring(lastBraceIndex);
+                                }
                             };
                         });
                     }
                 }
             });
+
+            this.applyAvatarModeSettings(this.lastAvatarMode || 'anime');
         };
 
         loader.load(
@@ -184,12 +281,20 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
             this.loadVRM(targetModelUrl);
         }
 
+        const avatarMode = settings.avatarMode || 'anime';
         this.customUniforms.uTime.value = audio.time;
         this.customUniforms.uBass.value = audio.bassEnergy ?? audio.kick ?? 0;
         this.customUniforms.uMid.value = audio.midEnergy ?? audio.snare ?? 0;
         this.customUniforms.uTreble.value = audio.trebleEnergy ?? audio.hihat ?? 0;
+        this.customUniforms.uIsHologram.value = avatarMode === 'hologram' ? 1.0 : 0.0;
+        this.customUniforms.uGlow.value = settings.visGlow ?? 0.5;
+        this.customUniforms.uEnergy.value = audio.energy ?? 0;
 
         if (this.vrm) {
+            if (avatarMode !== this.lastAvatarMode) {
+                this.applyAvatarModeSettings(avatarMode);
+            }
+
             if (this.talkingHead) {
                 this.talkingHead.update(audio, settings);
             }
@@ -292,12 +397,125 @@ export class VrmAnimeHybridVisualizer implements IVisualizer {
             // Base character draw
             ctx.drawImage(this.threeCanvas, 0, 0, width, height);
 
-            // Subtle holographic bloom overlay
+            // Double bloom scanline layer (Slight chromatic aberration horizontal offset)
             ctx.globalCompositeOperation = 'screen';
-            ctx.globalAlpha = 0.35 + (audio.energy * 0.25);
-            ctx.drawImage(this.threeCanvas, 0, 0, width, height);
+            const bloomAlpha = 0.45 + ((audio.bassEnergy ?? audio.kick ?? 0) * 0.25);
+            ctx.globalAlpha = Math.min(bloomAlpha, 0.9);
+            ctx.drawImage(this.threeCanvas, -3, 0, width + 6, height); // Glow bloom offset X
+            ctx.drawImage(this.threeCanvas, 3, 0, width - 6, height);  // Glow bloom offset X
+
+            // Horizontal CRT Scanline 2D Overlay (Gives retro physical analog grid scan)
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 0.06 + (audio.energy * 0.04);
+            ctx.fillStyle = '#00F0FF';
+            for (let y = 0; y < height; y += 4) {
+                ctx.fillRect(0, y, width, 1.5);
+            }
 
             ctx.restore();
         }
+    }
+
+    private applyAvatarModeSettings(avatarMode: string) {
+        this.lastAvatarMode = avatarMode;
+        if (!this.vrm) return;
+        const isHologram = avatarMode === 'hologram';
+        
+        this.vrm.scene.traverse((obj) => {
+            if ((obj as THREE.Mesh).isMesh) {
+                const mesh = obj as THREE.Mesh;
+                if (mesh.material) {
+                    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    materials.forEach(mat => {
+                        // Store original material properties if not already cached
+                        if (!this.originalMaterialProps.has(mat.uuid)) {
+                            this.originalMaterialProps.set(mat.uuid, {
+                                transparent: mat.transparent,
+                                depthWrite: mat.depthWrite,
+                                blending: mat.blending,
+                                side: mat.side
+                            });
+                        }
+
+                        if (isHologram) {
+                            mat.transparent = true;
+                            mat.depthWrite = false;
+                            mat.blending = THREE.AdditiveBlending;
+                            mat.side = THREE.DoubleSide;
+                        } else {
+                            // Restore original material properties perfectly
+                            const orig = this.originalMaterialProps.get(mat.uuid);
+                            if (orig) {
+                                mat.transparent = orig.transparent;
+                                mat.depthWrite = orig.depthWrite;
+                                mat.blending = orig.blending;
+                                mat.side = orig.side;
+                            } else {
+                                mat.transparent = false;
+                                mat.depthWrite = true;
+                                mat.blending = THREE.NormalBlending;
+                                mat.side = THREE.FrontSide;
+                            }
+                        }
+                        mat.needsUpdate = true;
+                    });
+                }
+            }
+        });
+    }
+
+    private disposeObject(obj: any) {
+        if (!obj) return;
+        if (obj.geometry) {
+            try { obj.geometry.dispose(); } catch (_) {}
+        }
+        if (obj.material) {
+            if (Array.isArray(obj.material)) {
+                obj.material.forEach((mat) => {
+                    try {
+                        if (mat.map) mat.map.dispose();
+                        if (mat.lightMap) mat.lightMap.dispose();
+                        if (mat.bumpMap) mat.bumpMap.dispose();
+                        if (mat.normalMap) mat.normalMap.dispose();
+                        if (mat.specularMap) mat.specularMap.dispose();
+                        if (mat.envMap) mat.envMap.dispose();
+                        mat.dispose();
+                    } catch (_) {}
+                });
+            } else {
+                try {
+                    if (obj.material.map) obj.material.map.dispose();
+                    if (obj.material.lightMap) obj.material.lightMap.dispose();
+                    if (obj.material.bumpMap) obj.material.bumpMap.dispose();
+                    if (obj.material.normalMap) obj.material.normalMap.dispose();
+                    if (obj.material.specularMap) obj.material.specularMap.dispose();
+                    if (obj.material.envMap) obj.material.envMap.dispose();
+                    obj.material.dispose();
+                } catch (_) {}
+            }
+        }
+    }
+
+    private cleanUpVRM() {
+        if (this.vrm) {
+            try { this.scene.remove(this.vrm.scene); } catch (_) {}
+            this.vrm.scene.traverse((obj) => {
+                this.disposeObject(obj);
+            });
+            this.vrm = null;
+            this.talkingHead = null;
+            this.originalMaterialProps.clear();
+        }
+    }
+
+    public dispose() {
+        this.cleanUpVRM();
+        if (this.renderer) {
+            try { this.renderer.dispose(); } catch (_) {}
+        }
+        this.scene.traverse((obj) => {
+            this.disposeObject(obj);
+        });
+        this.isLoaded = false;
     }
 }

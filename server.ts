@@ -2,6 +2,9 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
+import { spawn } from "child_process";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { GoogleGenAI } from "@google/genai";
 import { createRenderJob, getRenderJob, cancelRenderJob } from "./server/renderEngine";
 
@@ -9,12 +12,71 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Cloud Run / Nginx reverse proxy arkasında IP tespiti için
+  app.set("trust proxy", 1);
+
+  // 1. CORS Middleware (Her şeyden önce çalışmalı, ön uç ve iframe isteklerini karşılamalı)
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, Range, X-Render-Token");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
+  // 2. Güvenlik Başlıkları (Helmet - AI Studio iframe ve cross-origin medya dostu)
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    frameguard: false, // AI Studio iFrame önizlemesinin engellenmesini önler
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+    originAgentCluster: false
+  }));
+
   // Temp klasörü ve parça yükleme klasörü
   const TEMP_DIR = path.join(process.cwd(), "temp_renders");
   const UPLOADS_DIR = path.join(TEMP_DIR, "chunked_uploads");
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
+
+  // 3. Rate Limiting (DDoS, Brute-force & API Koruması)
+  const generalApiLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 dakika
+    max: 300, // 300 istek / dakika (yüksek frekanslı progress polling için güvenli)
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: { error: "Çok fazla istek gönderildi. Lütfen bir süre sonra tekrar deneyin." }
+  });
+
+  const renderLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 dakika
+    max: 60, // 60 render isteği / 15 dakika
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: { error: "Render işlem limitine ulaşıldı. Lütfen 15 dakika sonra tekrar deneyin." }
+  });
+
+  const lyricsLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 dakika
+    max: 30, // 30 AI şarkı sözü analizi / 15 dakika
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    message: { error: "Çok fazla AI şarkı sözü analizi isteği gönderildi. Lütfen 15 dakika sonra tekrar deneyin." }
+  });
+
+  app.use("/api/", generalApiLimiter);
+  app.use("/api/render/", renderLimiter);
+
+  // Body parser limits for JSON requests
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // Multer ile streaming dosya yükleme (bellek şişmesini ve JSON stringify boyut sınırlarını önler)
   const storage = multer.diskStorage({
@@ -46,9 +108,49 @@ async function startServer() {
     return aiClient;
   }
 
-  // Body parser limits for small JSON requests
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+  // SSRF Protection Helper for Outgoing Connections
+  function isUrlSafe(urlStr: string): boolean {
+    try {
+      if (urlStr.startsWith("/") || urlStr.startsWith("./")) {
+        return true;
+      }
+      const parsed = new URL(urlStr);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return false;
+      }
+      const host = parsed.hostname.toLowerCase();
+      
+      // Strict Whitelist: Only allow specific known domains (Suno CDNs, Google Storage, generic safe CDNs, Cloud Run)
+      const allowedDomains = [
+        "suno.com", "suno.ai",
+        "cdn1.suno.ai", "cdn2.suno.ai", "cdn.suno.ai",
+        "storage.googleapis.com", 
+        "firebasestorage.googleapis.com",
+        "run.app",
+        "localhost",
+        "127.0.0.1"
+      ];
+
+      // Check if it's strictly in the allowed domains
+      if (
+        allowedDomains.includes(host) ||
+        allowedDomains.some(d => host.endsWith("." + d))
+      ) {
+        return true;
+      }
+      
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // IDOR Koruması: Render Sahiplik Doğrulama Helper'ı
+  function isRenderJobAuthorized(req: express.Request, job: any): boolean {
+    if (!job || !job.ownerToken) return true;
+    const providedToken = (req.headers["x-render-token"] || req.query.token) as string | undefined;
+    return Boolean(providedToken && providedToken === job.ownerToken);
+  }
 
   // ============================================================
   // ⚡ SERVER-SIDE RENDER MOTORU API'LERİ (FFmpeg 60FPS)
@@ -59,7 +161,9 @@ async function startServer() {
     try {
       const { uploadId, fileType, chunkIndex, totalChunks } = req.body;
       const sanitizedId = (uploadId || "").replace(/[^a-zA-Z0-9_-]/g, "");
-      if (!sanitizedId || !fileType || !req.file) {
+      const sanitizedFileType = (fileType || "").replace(/[^a-zA-Z0-9_-]/g, "");
+
+      if (!sanitizedId || !sanitizedFileType || !req.file) {
         return res.status(400).json({ error: "Geçerli uploadId, fileType ve chunk dosyası gereklidir." });
       }
 
@@ -70,14 +174,14 @@ async function startServer() {
 
       const chunkNum = parseInt(chunkIndex, 10);
       const total = parseInt(totalChunks, 10);
-      const chunkFilePath = path.join(sessionDir, `${fileType}_part_${String(chunkNum).padStart(5, '0')}.tmp`);
+      const chunkFilePath = path.join(sessionDir, `${sanitizedFileType}_part_${String(chunkNum).padStart(5, '0')}.tmp`);
       
       fs.writeFileSync(chunkFilePath, req.file.buffer);
 
       res.json({
         success: true,
         uploadId: sanitizedId,
-        fileType,
+        fileType: sanitizedFileType,
         chunkIndex: chunkNum,
         totalChunks: total
       });
@@ -103,13 +207,14 @@ async function startServer() {
 
       // Parçaları birleştirme fonksiyonu (Senkronize ve Güvenli)
       const assembleFile = (type: string): string | null => {
+        const sanitizedType = type.replace(/[^a-zA-Z0-9_-]/g, "");
         const files = fs.readdirSync(sessionDir)
-          .filter(f => f.startsWith(`${type}_part_`))
+          .filter(f => f.startsWith(`${sanitizedType}_part_`))
           .sort();
 
         if (files.length === 0) return null;
 
-        const assembledPath = path.join(sessionDir, `${type}_assembled.bin`);
+        const assembledPath = path.join(sessionDir, `${sanitizedType}_assembled.bin`);
         if (fs.existsSync(assembledPath)) {
           try { fs.unlinkSync(assembledPath); } catch (_) {}
         }
@@ -129,11 +234,11 @@ async function startServer() {
       const logoFilePath = hasLogo ? assembleFile("logo") : null;
       const bgImageFilePath = hasBgImage ? assembleFile("bgimage") : null;
 
-      const jobId = await createRenderJob({
+      const { jobId, ownerToken } = await createRenderJob({
         audioFilePath,
         settings: settings || {},
         duration: duration ? parseFloat(duration) : undefined,
-        fps: fps ? parseInt(fps) : 30,
+        fps: fps ? parseInt(fps) : 60,
         coverFilePath,
         logoFilePath,
         bgImageFilePath,
@@ -142,6 +247,7 @@ async function startServer() {
 
       res.json({
         jobId,
+        ownerToken,
         status: "queued",
         message: "Dosyalar birleştirildi ve render işlemi başlatıldı."
       });
@@ -179,10 +285,10 @@ async function startServer() {
         const logoFile = files?.logo?.[0];
         const bgImageFile = files?.bgImage?.[0];
         const duration = req.body.duration ? parseFloat(req.body.duration) : undefined;
-        const fps = req.body.fps ? parseInt(req.body.fps) : 30;
+        const fps = req.body.fps ? parseInt(req.body.fps) : 60;
         const quality = req.body.quality === "720p" ? "720p" : "1080p";
 
-        const jobId = await createRenderJob({
+        const { jobId, ownerToken } = await createRenderJob({
           audioFilePath: audioFile.path,
           settings,
           duration,
@@ -195,6 +301,7 @@ async function startServer() {
 
         res.json({
           jobId,
+          ownerToken,
           status: "queued",
           message: "Render işlemi sunucu tarafında başarıyla başlatıldı."
         });
@@ -210,18 +317,20 @@ async function startServer() {
     try {
       const { audioBase64, audioRemoteUrl, settings, duration, fps, coverBase64, logoBase64, quality } = req.body;
       if (!audioBase64 && !audioRemoteUrl) {
-        return res.status(400).json({ error: "audioBase64 veya audioRemoteUrl zorunludur." });
+        return res.status(400).json({ error: "audioBase64 veya audioRemoteUrl zorununludur." });
       }
-      if (audioRemoteUrl && typeof audioRemoteUrl === "string" && !/^https?:\/\//i.test(audioRemoteUrl)) {
-        return res.status(400).json({ error: "Geçersiz audioRemoteUrl. Yalnızca HTTP veya HTTPS protokolleri desteklenir." });
+      if (audioRemoteUrl && typeof audioRemoteUrl === "string") {
+        if (!isUrlSafe(audioRemoteUrl)) {
+          return res.status(400).json({ error: "Geçersiz veya güvensiz audioRemoteUrl." });
+        }
       }
 
-      const jobId = await createRenderJob({
+      const { jobId, ownerToken } = await createRenderJob({
         audioBase64,
         audioRemoteUrl,
         settings: settings || {},
         duration: duration ? parseFloat(duration) : undefined,
-        fps: fps || 30,
+        fps: fps || 60,
         coverBase64,
         logoBase64,
         quality: quality || '1080p'
@@ -229,6 +338,7 @@ async function startServer() {
 
       res.json({
         jobId,
+        ownerToken,
         status: "queued",
         message: "Render işlemi sunucu tarafında başlatıldı."
       });
@@ -238,11 +348,14 @@ async function startServer() {
     }
   });
 
-  // 2. Canlı Render İlerleme Sorgusu
+  // 2. Canlı Render İlerleme Sorgusu (IDOR Korumalı)
   app.get("/api/render/progress/:jobId", (req, res) => {
     const job = getRenderJob(req.params.jobId);
     if (!job) {
       return res.status(404).json({ error: "Render işi bulunamadı." });
+    }
+    if (!isRenderJobAuthorized(req, job)) {
+      return res.status(403).json({ error: "Yetkisiz erişim: Geçersiz veya eksik sahiplik anahtarı (Owner Token)." });
     }
 
     res.json({
@@ -258,22 +371,28 @@ async function startServer() {
     });
   });
 
-  // 3. Render Edilen Videoyu Doğrudan İndirme (.mp4)
+  // 3. Render Edilen Videoyu Doğrudan İndirme (.mp4 - IDOR Korumalı)
   app.get("/api/render/download/:jobId", (req, res) => {
     const job = getRenderJob(req.params.jobId);
     if (!job || !job.outputPath || !fs.existsSync(job.outputPath)) {
       return res.status(404).send("Render dosyası bulunamadı veya henüz hazır değil.");
+    }
+    if (!isRenderJobAuthorized(req, job)) {
+      return res.status(403).send("Yetkisiz erişim: Bu render çıktısını indirme yetkiniz yok.");
     }
 
     const safeTitle = (job.trackTitle || "vidframer_export").replace(/[^a-zA-Z0-9_-]/g, "_");
     res.download(job.outputPath, `${safeTitle}.mp4`);
   });
 
-  // 4. Render Edilen Videoyu Tarayıcıda Önizleme / Stream Etme
+  // 4. Render Edilen Videoyu Tarayıcıda Önizleme / Stream Etme (IDOR Korumalı)
   app.get("/api/render/stream/:jobId", (req, res) => {
     const job = getRenderJob(req.params.jobId);
     if (!job || !job.outputPath || !fs.existsSync(job.outputPath)) {
       return res.status(404).send("Video dosyası bulunamadı.");
+    }
+    if (!isRenderJobAuthorized(req, job)) {
+      return res.status(403).send("Yetkisiz erişim: Bu videoyu izleme yetkiniz yok.");
     }
 
     res.setHeader("Content-Type", "video/mp4");
@@ -281,8 +400,15 @@ async function startServer() {
     stream.pipe(res);
   });
 
-  // 5. Render İptal Etme
+  // 5. Render İptal Etme (IDOR Korumalı)
   app.post("/api/render/cancel/:jobId", (req, res) => {
+    const job = getRenderJob(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Render işi bulunamadı." });
+    }
+    if (!isRenderJobAuthorized(req, job)) {
+      return res.status(403).json({ error: "Yetkisiz işlem: Bu render işini iptal etme yetkiniz yok." });
+    }
     const ok = cancelRenderJob(req.params.jobId);
     res.json({ success: ok });
   });
@@ -298,13 +424,87 @@ async function startServer() {
   });
 
   // ============================================================
-  // 📝 LİRİK SENKRONİZASYON API (GEMINI)
+  // 🎥 WEBM TO MP4 CONVERTER API (FFmpeg H.264/AAC)
   // ============================================================
-  app.post("/api/sync-lyrics", async (req, res) => {
+  app.post("/api/render/convert-webm-to-mp4", upload.single("video"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Dönüştürülecek video dosyası bulunamadı." });
+      }
+      
+      const inputPath = req.file.path;
+      const outputPath = path.join(TEMP_DIR, `converted_${Date.now()}_${Math.random().toString(36).substring(2,8)}.mp4`);
+      
+      const aspectRatio = req.body.aspectRatio || "16/9";
+      let scaleFilter = "pad=ceil(iw/2)*2:ceil(ih/2)*2";
+      if (aspectRatio === "9/16") {
+        scaleFilter = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,pad=ceil(iw/2)*2:ceil(ih/2)*2";
+      } else if (aspectRatio === "1/1") {
+        scaleFilter = "scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,pad=ceil(iw/2)*2:ceil(ih/2)*2";
+      } else if (aspectRatio === "16/9") {
+        scaleFilter = "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,pad=ceil(iw/2)*2:ceil(ih/2)*2";
+      }
+      
+      const ffmpegArgs = [
+        "-y",
+        "-i", inputPath,
+        "-vf", scaleFilter,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "22",
+        "-pix_fmt", "yuv420p",
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-movflags", "+faststart",
+        outputPath
+      ];
+      
+      const ffmpeg = spawn("ffmpeg", ffmpegArgs);
+      let stderrLog = "";
+      ffmpeg.stderr.on("data", (data: Buffer) => { stderrLog += data.toString(); });
+      
+      ffmpeg.on("error", (err: any) => {
+        console.error("FFmpeg spawn error:", err);
+        try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch (_) {}
+        if (!res.headersSent) {
+          res.status(500).json({ error: "FFmpeg dönüştürme başlatılamadı: " + err.message });
+        }
+      });
+      
+      ffmpeg.on("close", (code: number) => {
+        if (code === 0 && fs.existsSync(outputPath)) {
+          res.download(outputPath, "vidframer_export.mp4", (err) => {
+            try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch (_) {}
+            try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch (_) {}
+          });
+        } else {
+          console.error("FFmpeg convert failed. Exit code:", code, "Log:", stderrLog);
+          try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch (_) {}
+          try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch (_) {}
+          if (!res.headersSent) {
+            res.status(500).json({ error: "Video MP4 formatına dönüştürülemedi." });
+          }
+        }
+      });
+      
+    } catch (e: any) {
+      console.error("convert-webm-to-mp4 error:", e);
+      if (!res.headersSent) {
+        res.status(500).json({ error: e.message || "Dönüştürme başarısız oldu." });
+      }
+    }
+  });
+
+  // ============================================================
+  // 📝 GEMINI AI SYNC LYRICS (Rate-Limited & Güvenli Hata Yönetimi)
+  // ============================================================
+  app.post("/api/sync-lyrics", lyricsLimiter, async (req, res) => {
     try {
       const { audioBase64, mimeType } = req.body;
       if (!audioBase64 || !mimeType) {
-        return res.status(400).json({ error: "audioBase64 and mimeType are required" });
+        return res.status(400).json({ error: "audioBase64 ve mimeType parametreleri zorunludur." });
       }
 
       const ai = getAIClient();
@@ -326,57 +526,10 @@ async function startServer() {
       const parsed = JSON.parse(cleanJson);
       res.json(parsed);
     } catch (error: any) {
-      console.warn("AI Sync Quota / Rate limit, utilizing high-precision rhythmic fallback:", error?.message || error);
-      // Gemini kota aşımı veya yoğunluk durumunda akıllı ritmik zamanlama üret
-      const fallbackLyrics = [
-        { 
-          startTime: 0.0, 
-          endTime: 4.0, 
-          text: "Gecenin içinde kaybolan ışıklar",
-          words: [
-            { word: "Gecenin", startTime: 0.0, endTime: 1.0 },
-            { word: "içinde", startTime: 1.0, endTime: 2.0 },
-            { word: "kaybolan", startTime: 2.0, endTime: 3.0 },
-            { word: "ışıklar", startTime: 3.0, endTime: 4.0 }
-          ]
-        },
-        { 
-          startTime: 4.0, 
-          endTime: 8.0, 
-          text: "Neon sokaklarda yankılanan sesler",
-          words: [
-            { word: "Neon", startTime: 4.0, endTime: 5.0 },
-            { word: "sokaklarda", startTime: 5.0, endTime: 6.0 },
-            { word: "yankılanan", startTime: 6.0, endTime: 7.0 },
-            { word: "sesler", startTime: 7.0, endTime: 8.0 }
-          ]
-        },
-        { 
-          startTime: 8.0, 
-          endTime: 12.0, 
-          text: "Zaman durur ama ritim devam eder",
-          words: [
-            { word: "Zaman", startTime: 8.0, endTime: 9.0 },
-            { word: "durur", startTime: 9.0, endTime: 10.0 },
-            { word: "ama", startTime: 10.0, endTime: 10.8 },
-            { word: "ritim", startTime: 10.8, endTime: 11.4 },
-            { word: "devam eder", startTime: 11.4, endTime: 12.0 }
-          ]
-        },
-        { 
-          startTime: 12.0, 
-          endTime: 16.0, 
-          text: "Gözlerini kapat ve akışa bırak",
-          words: [
-            { word: "Gözlerini", startTime: 12.0, endTime: 13.0 },
-            { word: "kapat", startTime: 13.0, endTime: 14.0 },
-            { word: "ve", startTime: 14.0, endTime: 14.8 },
-            { word: "akışa", startTime: 14.8, endTime: 15.4 },
-            { word: "bırak", startTime: 15.4, endTime: 16.0 }
-          ]
-        }
-      ];
-      res.json(fallbackLyrics);
+      console.error("AI Sync Lyrics error:", error?.message || error);
+      res.status(502).json({ 
+        error: "Şarkı sözü senkronizasyonu AI servisi tarafından tamamlanamadı: " + (error?.message || "AI servisi yanıt vermedi.")
+      });
     }
   });
 
@@ -413,6 +566,9 @@ async function startServer() {
 
       // Adım B: Eğer /s/ short linki veya henüz UUID çıkarılamamış bir Suno web URL'i girilmişse
       if ((!trackId || input.includes('/s/')) && /^https?:\/\//i.test(input)) {
+        if (!isUrlSafe(input)) {
+          return res.status(400).json({ error: "Güvensiz veya geçersiz Suno URL'i." });
+        }
         try {
           const pageRes = await fetch(input, {
             headers: {
@@ -518,8 +674,8 @@ async function startServer() {
         targetUrl = `https://cdn1.suno.ai/${trackId}.mp3`;
       }
 
-      if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
-        return res.status(400).send("Geçerli bir audio url gereklidir.");
+      if (!targetUrl || !isUrlSafe(targetUrl)) {
+        return res.status(400).send("Geçerli ve güvenli bir audio url gereklidir.");
       }
 
       // Suno CDN'den audio stream çek

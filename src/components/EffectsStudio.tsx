@@ -82,7 +82,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
     }
   };
 
-  // Ana 11 efekt listesi
+  // Ana 12 efekt listesi
   const effectsList = [
     {
       id: 'rgbSplit',
@@ -132,13 +132,13 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
     {
       id: 'strobe',
       name: 'BASS STROBE / FLASH (KULÜP ÇAKARI)',
-      desc: 'Ağır kick vuruşlarında yüksek enerjili beyaz flaş çakarı',
+      desc: '⚠️ FLASHER UYARISI: Fotosensitif epilepsi hastaları için uygun olmayabilir.',
       enabled: Boolean(settings.strobeEnabled),
       value: settings.strobe ?? 0.4, min: 0.1, max: 1.0, step: 0.05,
       onToggle: () => onChange({ strobeEnabled: !settings.strobeEnabled }),
       onSlide: (v: number) => onChange({ strobe: v, strobeEnabled: true })
     },
-    {
+    /* {
       id: 'cameraShake',
       name: 'CAMERA SHAKE / BEAT JITTER',
       desc: 'Bas frekanslarında deprem ve sarsıntı reaktivitesi',
@@ -146,7 +146,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       value: settings.cameraShake ?? 0.3, min: 0.1, max: 1.0, step: 0.05,
       onToggle: () => onChange({ cameraShakeEnabled: !settings.cameraShakeEnabled }),
       onSlide: (v: number) => onChange({ cameraShake: v, cameraShakeEnabled: true })
-    },
+    }, */
     {
       id: 'glitchSlice',
       name: 'GLITCH SLICE (DİJİTAL BANT KAYMASI)',
@@ -165,7 +165,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       onToggle: () => onChange({ edgeGlowEnabled: !settings.edgeGlowEnabled }),
       onSlide: (v: number) => onChange({ edgeGlow: v, edgeGlowEnabled: true })
     },
-    {
+    /* {
       id: 'lensDistort',
       name: 'LENS DISTORTION (BALIK GÖZÜ)',
       desc: 'Optik mercek çarpıtması ve fisheye bükülme efekti',
@@ -173,8 +173,8 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       value: settings.lensDistort ?? 0.3, min: 0.05, max: 1.0, step: 0.05,
       onToggle: () => onChange({ lensDistortEnabled: !settings.lensDistortEnabled }),
       onSlide: (v: number) => onChange({ lensDistort: v, lensDistortEnabled: true })
-    },
-    {
+    }, */
+    /* {
       id: 'motionTrail',
       name: 'MOTION TRAIL / GHOST ECHO',
       desc: 'Hareket eden nesnelerin arkasında kalan kalıcı iz efekti',
@@ -182,8 +182,8 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       value: settings.motionTrail ?? 0.3, min: 0.05, max: 0.95, step: 0.05,
       onToggle: () => onChange({ motionTrailEnabled: !settings.motionTrailEnabled }),
       onSlide: (v: number) => onChange({ motionTrail: v, motionTrailEnabled: true })
-    },
-    {
+    }, */
+    /* {
       id: 'hueRotate',
       name: 'HUE ROTATION (RENK KAYDIRMA)',
       desc: 'Basa reaktif sürekli renk tonu dönüşümü ve gökkuşağı efekti',
@@ -191,7 +191,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       value: settings.hueRotate ?? 0.3, min: 0.05, max: 2.0, step: 0.05,
       onToggle: () => onChange({ hueRotateEnabled: !settings.hueRotateEnabled }),
       onSlide: (v: number) => onChange({ hueRotate: v, hueRotateEnabled: true })
-    },
+    }, */
   ];
 
   return (
@@ -199,12 +199,12 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       {/* BAŞLIK & HAZIR PRESET BUTONLARI */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/[0.08] pb-3 gap-2">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[#FFD700]" />
+          <Sparkles className="w-4 h-4 text-accent" />
           <div>
-            <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-white">
+            <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-content-primary">
               GÖRSEL EFEKTLER (12 FX SHADER)
             </h3>
-            <p className="text-[8.5px] text-zinc-500 font-mono">
+            <p className="text-[8.5px] text-content-tertiary font-sans">
               Bas ve frekanslara duyarlı gerçek zamanlı post-process efektleri.
             </p>
           </div>
@@ -224,7 +224,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
             <button
               key={btn.id}
               onClick={() => applyPreset(btn.id as any)}
-              className="px-2 py-0.5 bg-black/60 hover:bg-[#FFD700] text-zinc-400 hover:text-black border border-white/[0.08] hover:border-[#FFD700] text-[8px] font-mono font-bold tracking-wider uppercase transition-all cursor-pointer rounded-sm"
+              className="px-2 py-0.5 bg-panel hover:bg-accent text-content-secondary hover:text-black border border-white/[0.08] hover:border-accent text-[8px] font-sans font-bold tracking-wider uppercase transition-all cursor-pointer rounded-sm"
             >
               {btn.label}
             </button>
@@ -235,13 +235,13 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       {/* MASTER KONTROLLER (2-KOL) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Master Intensity */}
-        <div className="bg-black/40 p-3.5 border border-white/[0.08] rounded-sm flex flex-col gap-2.5">
+        <div className="bg-panel p-3.5 border border-white/[0.08] rounded-sm flex flex-col gap-2.5">
           <div className="space-y-0.5">
-            <div className="text-[9.5px] font-mono font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Zap size={12} className="text-[#FFD700]" />
+            <div className="text-[9.5px] font-sans font-bold text-content-primary uppercase tracking-wider flex items-center gap-1.5">
+              <Zap size={12} className="text-accent" />
               MASTER INTENSITY (GENEL ŞİDDET)
             </div>
-            <p className="text-[8px] font-mono text-zinc-500">
+            <p className="text-[8px] font-sans text-content-tertiary">
               Tüm efektlerin vuruşlara tepki çarpanı.
             </p>
           </div>
@@ -250,22 +250,22 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
               type="range" min="0.1" max="2.0" step="0.05"
               value={settings.intensity}
               onChange={(e) => onChange({ intensity: parseFloat(e.target.value) })}
-              className="flex-1 h-1.5 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="flex-1 h-1.5 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
-            <span className="text-[10px] font-mono font-bold text-[#FFD700] w-12 text-right">
+            <span className="text-[10px] font-sans font-bold text-accent w-12 text-right">
               %{Math.round(settings.intensity * 100)}
             </span>
           </div>
         </div>
 
         {/* Audio Reactivity */}
-        <div className="bg-zinc-950 p-4 border border-zinc-800/80 flex flex-col gap-3">
+        <div className="bg-panel p-4 border border-border-strong flex flex-col gap-3">
           <div className="space-y-0.5">
-            <div className="text-[10px] font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-              <RefreshCw size={13} className="text-[#FFD700]" />
+            <div className="text-[10px] font-black text-content-primary uppercase tracking-wider flex items-center gap-1.5">
+              <RefreshCw size={13} className="text-accent" />
               AUDIO REAKTİVİTE (SES DUYARLILIĞI)
             </div>
-            <p className="text-[8px] font-mono text-zinc-500">
+            <p className="text-[8px] font-sans text-content-tertiary">
               Sesin efektleri tetikleme hassasiyeti ve hızı.
             </p>
           </div>
@@ -274,9 +274,9 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
               type="range" min="0.1" max="2.0" step="0.05"
               value={settings.audioReactivity ?? 0.8}
               onChange={(e) => onChange({ audioReactivity: parseFloat(e.target.value) })}
-              className="flex-1 h-1.5 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="flex-1 h-1.5 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
-            <span className="text-[10px] font-mono font-bold text-[#FFD700] w-12 text-right">
+            <span className="text-[10px] font-sans font-bold text-accent w-12 text-right">
               %{Math.round((settings.audioReactivity ?? 0.8) * 100)}
             </span>
           </div>
@@ -287,133 +287,86 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
       <div className="bg-[#080808] border border-yellow-400/40 p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles size={14} className="text-[#FFD700]" />
-            <h3 className="text-[10px] font-black tracking-widest text-[#FFD700] uppercase">
+            <Sparkles size={14} className="text-accent" />
+            <h3 className="text-[10px] font-black tracking-widest text-accent uppercase">
               GÖRSELLEŞTİRİCİ TAM DENETİM & İNCE AYAR (GRANULAR FINE-TUNING)
             </h3>
           </div>
-          <span className="text-[9px] font-mono text-zinc-500">CANLI MODÜLASYON PARAMETRELERİ</span>
+          <span className="text-[9px] font-sans text-content-tertiary">CANLI MODÜLASYON PARAMETRELERİ</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
           {/* HIZ ÇARPANI */}
-          <div className="bg-zinc-950 p-3 border border-zinc-800/80 space-y-1.5">
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-zinc-400 uppercase">ANİMASYON HIZI:</span>
-              <span className="text-[#FFD700] font-bold">{(settings.visSpeed ?? 1.0).toFixed(1)}x</span>
+          <div className="bg-panel p-3 border border-border-strong space-y-1.5">
+            <div className="flex justify-between text-[9px] font-sans">
+              <span className="text-content-secondary uppercase">ANİMASYON HIZI:</span>
+              <span className="text-accent font-bold">{(settings.visSpeed ?? 1.0).toFixed(1)}x</span>
             </div>
             <input
               type="range" min="0.1" max="3.0" step="0.1"
               value={settings.visSpeed ?? 1.0}
               onChange={(e) => onChange({ visSpeed: parseFloat(e.target.value) })}
-              className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
           </div>
 
           {/* ÖLÇEK / BOYUT */}
-          <div className="bg-zinc-950 p-3 border border-zinc-800/80 space-y-1.5">
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-zinc-400 uppercase">GEOMETRİ ÖLÇEĞİ:</span>
-              <span className="text-[#FFD700] font-bold">{(settings.visScale ?? 1.0).toFixed(1)}x</span>
+          <div className="bg-panel p-3 border border-border-strong space-y-1.5">
+            <div className="flex justify-between text-[9px] font-sans">
+              <span className="text-content-secondary uppercase">GEOMETRİ ÖLÇEĞİ:</span>
+              <span className="text-accent font-bold">{(settings.visScale ?? 1.0).toFixed(1)}x</span>
             </div>
             <input
               type="range" min="0.2" max="2.5" step="0.1"
               value={settings.visScale ?? 1.0}
               onChange={(e) => onChange({ visScale: parseFloat(e.target.value) })}
-              className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
           </div>
 
           {/* YOĞUNLUK / PARÇACIK SAYISI */}
-          <div className="bg-zinc-950 p-3 border border-zinc-800/80 space-y-1.5">
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-zinc-400 uppercase">YOĞUNLUK / ELEMAN:</span>
-              <span className="text-[#FFD700] font-bold">{(settings.visDensity ?? 1.0).toFixed(1)}x</span>
+          <div className="bg-panel p-3 border border-border-strong space-y-1.5">
+            <div className="flex justify-between text-[9px] font-sans">
+              <span className="text-content-secondary uppercase">YOĞUNLUK / ELEMAN:</span>
+              <span className="text-accent font-bold">{(settings.visDensity ?? 1.0).toFixed(1)}x</span>
             </div>
             <input
               type="range" min="0.2" max="2.0" step="0.1"
               value={settings.visDensity ?? 1.0}
               onChange={(e) => onChange({ visDensity: parseFloat(e.target.value) })}
-              className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
           </div>
 
           {/* DÖNME HIZI */}
-          <div className="bg-zinc-950 p-3 border border-zinc-800/80 space-y-1.5">
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-zinc-400 uppercase">ROTASYON HIZI:</span>
-              <span className="text-[#FFD700] font-bold">{(settings.visRotation ?? 0.5).toFixed(1)}</span>
+          <div className="bg-panel p-3 border border-border-strong space-y-1.5">
+            <div className="flex justify-between text-[9px] font-sans">
+              <span className="text-content-secondary uppercase">ROTASYON HIZI:</span>
+              <span className="text-accent font-bold">{(settings.visRotation ?? 0.5).toFixed(1)}</span>
             </div>
             <input
               type="range" min="-2.0" max="2.0" step="0.1"
               value={settings.visRotation ?? 0.5}
               onChange={(e) => onChange({ visRotation: parseFloat(e.target.value) })}
-              className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
           </div>
 
           {/* PARLAMA / IŞIMA */}
-          <div className="bg-zinc-950 p-3 border border-zinc-800/80 space-y-1.5">
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-zinc-400 uppercase">VISUALIZER GLOW (IŞIMA):</span>
-              <span className="text-[#FFD700] font-bold">%{Math.round((settings.visGlow ?? 0.5) * 100)}</span>
+          <div className="bg-panel p-3 border border-border-strong space-y-1.5">
+            <div className="flex justify-between text-[9px] font-sans">
+              <span className="text-content-secondary uppercase">VISUALIZER GLOW (IŞIMA):</span>
+              <span className="text-accent font-bold">%{Math.round((settings.visGlow ?? 0.5) * 100)}</span>
             </div>
             <input
               type="range" min="0.0" max="1.0" step="0.05"
               value={settings.visGlow ?? 0.5}
               onChange={(e) => onChange({ visGlow: parseFloat(e.target.value) })}
-              className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
+              className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer"
             />
           </div>
 
-          {/* RİTİM DUYARLILIĞI */}
-          <div className="bg-zinc-950 p-3 border border-zinc-800/80 space-y-1.5">
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-zinc-400 uppercase">RİTİM / BEAT REAKTİVİTESİ:</span>
-              <span className="text-[#FFD700] font-bold">{(settings.visBeatSensitivity ?? 1.0).toFixed(1)}x</span>
-            </div>
-            <input
-              type="range" min="0.1" max="3.0" step="0.1"
-              value={settings.visBeatSensitivity ?? 1.0}
-              onChange={(e) => onChange({ visBeatSensitivity: parseFloat(e.target.value) })}
-              className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* GLİÇ FREKANS & DİSTORSİYON SLIDERS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-zinc-950 p-4 border border-zinc-800/80 space-y-2">
-          <div className="flex justify-between text-[9px] font-mono">
-            <span className="text-zinc-400 uppercase">GLİÇ FREKANS (BOZULMA HIZI)</span>
-            <span className="text-[#FFD700] font-bold">%{Math.round((settings.glitchFrequency ?? 0.3) * 100)}</span>
-          </div>
-          <input
-            type="range" min="0.0" max="1.0" step="0.05"
-            value={settings.glitchFrequency ?? 0.3}
-            onChange={(e) => onChange({ glitchFrequency: parseFloat(e.target.value) })}
-            className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
-          />
-          <p className="text-[8px] font-mono text-zinc-600">Dijital bozulma ve slice etkilerinin tetiklenme sıklığı.</p>
-        </div>
-
-        <div className="bg-zinc-950 p-4 border border-zinc-800/80 space-y-2">
-          <div className="flex justify-between text-[9px] font-mono">
-            <span className="text-zinc-400 uppercase">DİSTORSİYON (GEOMETRİK BÜKÜLME)</span>
-            <span className="text-[#FFD700] font-bold">%{Math.round((settings.distortion ?? 0.0) * 100)}</span>
-          </div>
-          <input
-            type="range" min="0.0" max="1.0" step="0.05"
-            value={settings.distortion ?? 0.0}
-            onChange={(e) => onChange({ distortion: parseFloat(e.target.value) })}
-            className="w-full h-1 bg-zinc-800 accent-[#FFD700] appearance-none cursor-pointer"
-          />
-          <p className="text-[8px] font-mono text-zinc-600">Canvas koordinat sistemini büken geometrik bozulma çarpanı.</p>
-        </div>
-      </div>
-
-      {/* 12 FARKLI BAĞIMSIZ EFEKT KARTI (TOGGLE + SLIDER) */}
+          {/* RİTİM DUYARLILIĞI REMOVED FOR NOW */}</div></div> {/* GLİÇ FREKANS & DİSTORSİYON SLIDERS REMOVED FOR NOW */} {/* 12 FARKLI BAĞIMSIZ EFEKT KARTI (TOGGLE + SLIDER) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {effectsList.map((fx) => (
           <div
@@ -421,27 +374,27 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
             className={cn(
               "p-4 border transition-all flex flex-col justify-between space-y-3",
               fx.enabled
-                ? "bg-[#090909] border-zinc-700/80 shadow-[0_0_15px_rgba(255,215,0,0.03)]"
-                : "bg-[#030303] border-zinc-900 opacity-60 hover:opacity-90"
+                ? "bg-panel border-border-strong shadow-[0_0_15px_rgba(255,215,0,0.03)]"
+                : "bg-surface border-border-subtle opacity-60 hover:opacity-90"
             )}
           >
             {/* Kart Başlığı & Aç/Kapa Butonu */}
             <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="text-[9px] font-black tracking-wider uppercase text-zinc-200">
+                <div className="text-[9px] font-black tracking-wider uppercase text-content-primary">
                   {fx.name}
                 </div>
-                <div className="text-[8px] font-mono text-zinc-500 mt-0.5 line-clamp-2">
+                <div className="text-[8px] font-sans text-content-tertiary mt-0.5 line-clamp-2">
                   {fx.desc}
                 </div>
               </div>
               <button
                 onClick={fx.onToggle}
                 className={cn(
-                  "px-2 py-0.5 text-[8px] font-mono font-black uppercase border transition-all cursor-pointer shrink-0 flex items-center gap-1",
+                  "px-2 py-0.5 text-[8px] font-sans font-black uppercase border transition-all cursor-pointer shrink-0 flex items-center gap-1",
                   fx.enabled
-                    ? "bg-[#FFD700] text-black border-[#FFD700]"
-                    : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-zinc-300"
+                    ? "bg-accent text-black border-accent"
+                    : "bg-surface text-content-tertiary border-border-strong hover:text-content-secondary"
                 )}
               >
                 {fx.enabled ? <Eye size={10} /> : <EyeOff size={10} />}
@@ -451,9 +404,9 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
 
             {/* Slider & Değer */}
             <div className="space-y-1 pt-1">
-              <div className="flex justify-between text-[8px] font-mono">
-                <span className="text-zinc-500 uppercase">ŞİDDET / YOĞUNLUK:</span>
-                <span className={cn("font-bold", fx.enabled ? "text-[#FFD700]" : "text-zinc-600")}>
+              <div className="flex justify-between text-[8px] font-sans">
+                <span className="text-content-tertiary uppercase">ŞİDDET / YOĞUNLUK:</span>
+                <span className={cn("font-bold", fx.enabled ? "text-accent" : "text-content-tertiary")}>
                   %{Math.round(fx.value * 100)}
                 </span>
               </div>
@@ -465,7 +418,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
                 onChange={(e) => fx.onSlide(parseFloat(e.target.value))}
                 className={cn(
                   "w-full h-1 appearance-none cursor-pointer",
-                  fx.enabled ? "bg-zinc-800 accent-[#FFD700]" : "bg-zinc-900 accent-zinc-700 opacity-40 cursor-not-allowed"
+                  fx.enabled ? "bg-hover accent-[#FFD700]" : "bg-surface accent-zinc-700 opacity-40 cursor-not-allowed"
                 )}
               />
             </div>

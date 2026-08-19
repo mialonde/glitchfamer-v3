@@ -54,13 +54,22 @@ Bu doküman, GlitchFramer uygulamasının ilk açılışından nihai 60FPS MP4 v
 
 ---
 
-## 5. Dışa Aktarma Akışı (Export Workflow)
+## 5. DSP & Spotify -14 LUFS Mastering Akışı (Mastering Workflow)
+
+1. **Mastering Konsolu** sekmesini veya Hızlı Başlat panelini açın.
+2. **Spotify Standardı (-14 LUFS) Hassas Normalizasyon** butonuna tıklayın.
+3. Web Audio 6-bant analog modelleme zinciri (LowShelf, MidPresence, TrebleAir, Tube/Tape Saturation ve DynamicsCompressor) şarkıyı Spotify tepe seviyelerine optimize eder.
+4. İsteğe göre `YOUTUBE`, `PHONK`, `TIKTOK_BASS`, `LOFI_WARM` ve `CINEMATIC` profilleri arasında geçiş yapabilirsiniz.
+
+---
+
+## 6. Dışa Aktarma Akışı (Export Workflow)
 
 1. **Sunucu Tarafı Render (Server-Side FFmpeg Engine - Önerilen)**:
    - `Render Motoru` ayarlarından `Server Engine (FFmpeg 60FPS)` modunu ve `1080p` kalitesini seçin.
    - `Render MP4` butonuna tıklayın.
-   - Ses ve görseller sunucuya parçalı (chunked) aktarılır.
+   - Ses ve görseller sunucuya atomik FormData ile aktarılır.
    - FFmpeg 60FPS hızında kare kare video çizer, sesi birleştirir ve hazır `.mp4` indirme bağlantısını sunar.
-2. **İstemci Tarafı Kayıt (Client-Side MediaRecorder)**:
-   - Hızlı tarayıcı kaydı için `Client Engine` seçilebilir.
+2. **İstemci Tarafı Kayıt & Sunucu MP4 Dönüştürme**:
    - Tarayıcı canlı oynatım esnasında Canvas akışını `.webm` olarak kaydeder.
+   - İsteğe bağlı olarak "Sunucuda MP4'e Dönüştür" butonu ile saniyeler içinde H.264/AAC MP4'e çevrilir.

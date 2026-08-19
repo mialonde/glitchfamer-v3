@@ -92,15 +92,22 @@ export class QuantumFieldVisualizer implements IVisualizer {
       ctx.shadowBlur = 12 * glow * (1 + kickBoost);
     }
 
-    // 1. Draw Constellation lines between close particles
+    // 1. Draw Constellation lines between close particles using optimized sweep-and-prune (O(N log N) on average)
     const maxLinkDist = 110 * scale;
     ctx.lineWidth = 1;
 
-    for (let i = 0; i < this.particles.length; i++) {
-      const p1 = this.particles[i];
-      for (let j = i + 1; j < this.particles.length; j++) {
-        const p2 = this.particles[j];
-        const dx = (p1.x - p2.x) * scale;
+    const sortedParticles = [...this.particles].sort((a, b) => a.x - b.x);
+
+    for (let i = 0; i < sortedParticles.length; i++) {
+      const p1 = sortedParticles[i];
+      for (let j = i + 1; j < sortedParticles.length; j++) {
+        const p2 = sortedParticles[j];
+        const dx = (p2.x - p1.x) * scale;
+        
+        // Since they are sorted by X, if dx is already greater or equal to maxLinkDist,
+        // no subsequent particle in the inner loop can possibly be within maxLinkDist.
+        if (dx >= maxLinkDist) break;
+
         const dy = (p1.y - p2.y) * scale;
         const dist = Math.hypot(dx, dy);
 

@@ -69,6 +69,14 @@ Bu doküman, GlitchFramer projesinde yer alan tüm çalışan özellikleri, dene
 - **DynamicsCompressor**: Master çıkış limitleme ve kompresyon.
 - **Mastering Presets**: `SPOTIFY`, `YOUTUBE`, `PHONK`, `WARM_TAPE`, `BYPASS`.
 
+### F. Kullanıcı Deneyimi (UX), Proje Kalıcılığı & Performans (YENİ)
+- **Geri Al / İleri Al (Undo/Redo)**: Sahnede yapılan 50 adımlık görsel ayar geçmişini hafızada tutarak `Ctrl+Z`, `Ctrl+Y` ve arayüz butonları ile geri/ileri alabilme.
+- **Proje Kaydetme / Yükleme (.JSON)**: Tüm ayarlar ve senkronize edilmiş lirikleri içeren projeyi `.json` dosyası olarak yerel bilgisayara indirme ve geri açma desteği.
+- **Otomatik Seans Yedekleme & Kurtarma**: Tarayıcıda `localStorage` üzerinde çalışan `"vidframer_project_autosave"` anahtarıyla otomatik periyodik kayıt mekanizması. Sistem açıldığında yarım kalan seansı kurtarma bildirimi.
+- **Eco Mode (Düşük Performans Optimizasyonu)**: Pilde çalışan veya mobil/eski cihazlar için tek tıkla aktifleşen Eco Mod. Aktifken partikül yoğunluğunu %50 düşürür, ölçeği optimize eder ve işlemciyi yoran Bloom, Motion Trail, Glitch Slice, RGB Split gibi ağır efektleri otomatik kapatır.
+- **Video Altyazı Dışa Aktarımı (SRT / VTT)**: Senkronize edilen şarkı sözlerini standart video oynatıcılar ve video kurgu yazılımları ile doğrudan uyumlu kılmak için milisaniye hassasiyetli zaman kodlu `.srt` (SubRip) ve `.vtt` (WebVTT) formatlarında indirebilme.
+- **Sayfadan Ayrılma Koruması**: Canlı kayıt veya sunucu render işlemi devam ederken sekmeyi yanlışlıkla kapatmayı veya sayfayı yenilemeyi önleyen `beforeunload` koruması.
+
 ---
 
 ## 2. Teknik Kısıtlamalar (Technical Limitations)
