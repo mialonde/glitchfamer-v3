@@ -4,6 +4,13 @@ import fs from "fs";
 import multer from "multer";
 import { spawn } from "child_process";
 import { createRenderJob, getRenderJob, cancelRenderJob } from "../renderEngine";
+import { 
+  isUrlSafe, 
+  resolveSafeLocalPath, 
+  clampDuration, 
+  clampFps, 
+  dailyQuotaManager 
+} from "../utils/security";
 
 const router = Router();
 
@@ -31,48 +38,21 @@ const chunkUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB chunk max
 });
 
-// Helper for security URL check
-function isUrlSafe(urlStr: string): boolean {
-  try {
-    if (urlStr.startsWith("/") || urlStr.startsWith("./")) {
-      return true;
-    }
-    const parsed = new URL(urlStr);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return false;
-    }
-    const host = parsed.hostname.toLowerCase();
-    
-    const allowedDomains = [
-      "suno.com", "suno.ai",
-      "cdn1.suno.ai", "cdn2.suno.ai", "cdn.suno.ai",
-      "storage.googleapis.com", 
-      "firebasestorage.googleapis.com"
-    ];
-
-    if (process.env.NODE_ENV !== "production") {
-      allowedDomains.push("localhost", "127.0.0.1");
-    }
-
-    if (
-      allowedDomains.includes(host) ||
-      allowedDomains.some(d => host.endsWith("." + d))
-    ) {
-      return true;
-    }
-    
-    return false;
-  } catch (_) {
-    return false;
-  }
-}
-
 // IDOR Protection: Render Owner Validation (Fail-Closed)
 function isRenderJobAuthorized(req: express.Request, job: any): boolean {
   if (!job) return false;
   if (!job.ownerToken) return false;
   const providedToken = (req.headers["x-render-token"] || req.query.token) as string | undefined;
   return Boolean(providedToken && providedToken === job.ownerToken);
+}
+
+// Helper: Extract client IP for quota tracking
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket?.remoteAddress || req.ip || "127.0.0.1";
 }
 
 // 1a. Chunk Upload
@@ -113,6 +93,17 @@ router.post("/upload-chunk", chunkUpload.single("chunk"), async (req, res) => {
 // 1b. Assemble Chunks and Start Render
 router.post("/assemble-and-start", async (req, res) => {
   try {
+    const clientIp = getClientIp(req);
+    const quota = dailyQuotaManager.checkAndIncrementRender(clientIp);
+    if (!quota.allowed) {
+      res.setHeader("X-Daily-Quota-Remaining", "0");
+      return res.status(429).json({ 
+        error: `Günlük render kotanıza (${quota.totalLimit} işlem/gün) ulaştınız. Lütfen yarın tekrar deneyin.`,
+        remaining: 0 
+      });
+    }
+    res.setHeader("X-Daily-Quota-Remaining", quota.remaining.toString());
+
     const { uploadId, settings, duration, fps, quality, hasCover, hasLogo, hasBgImage } = req.body;
     const sanitizedId = (uploadId || "").replace(/[^a-zA-Z0-9_-]/g, "");
     if (!sanitizedId) {
@@ -139,6 +130,8 @@ router.post("/assemble-and-start", async (req, res) => {
       for (const file of files) {
         const chunkData = fs.readFileSync(path.join(sessionDir, file));
         fs.appendFileSync(assembledPath, chunkData);
+        // Parçayı birleştirdikten hemen sonra temizle (disk tasarrufu)
+        try { fs.unlinkSync(path.join(sessionDir, file)); } catch (_) {}
       }
       return assembledPath;
     };
@@ -152,11 +145,14 @@ router.post("/assemble-and-start", async (req, res) => {
     const logoFilePath = hasLogo ? assembleFile("logo") : null;
     const bgImageFilePath = hasBgImage ? assembleFile("bgimage") : null;
 
+    const clampedDuration = duration ? clampDuration(parseFloat(duration)) : undefined;
+    const clampedFps = fps ? clampFps(parseInt(fps, 10)) : 60;
+
     const { jobId, ownerToken } = await createRenderJob({
       audioFilePath,
       settings: settings || {},
-      duration: duration ? parseFloat(duration) : undefined,
-      fps: fps ? parseInt(fps) : 60,
+      duration: clampedDuration,
+      fps: clampedFps,
       coverFilePath,
       logoFilePath,
       bgImageFilePath,
@@ -186,6 +182,17 @@ router.post(
   ]),
   async (req, res) => {
     try {
+      const clientIp = getClientIp(req);
+      const quota = dailyQuotaManager.checkAndIncrementRender(clientIp);
+      if (!quota.allowed) {
+        res.setHeader("X-Daily-Quota-Remaining", "0");
+        return res.status(429).json({ 
+          error: `Günlük render kotanıza (${quota.totalLimit} işlem/gün) ulaştınız. Lütfen yarın tekrar deneyin.`,
+          remaining: 0 
+        });
+      }
+      res.setHeader("X-Daily-Quota-Remaining", quota.remaining.toString());
+
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
       const audioFile = files?.audio?.[0];
       if (!audioFile) {
@@ -202,8 +209,8 @@ router.post(
       const coverFile = files?.cover?.[0];
       const logoFile = files?.logo?.[0];
       const bgImageFile = files?.bgImage?.[0];
-      const duration = req.body.duration ? parseFloat(req.body.duration) : undefined;
-      const fps = req.body.fps ? parseInt(req.body.fps) : 60;
+      const duration = req.body.duration ? clampDuration(parseFloat(req.body.duration)) : undefined;
+      const fps = req.body.fps ? clampFps(parseInt(req.body.fps, 10)) : 60;
       const quality = req.body.quality === "720p" ? "720p" : "1080p";
 
       const { jobId, ownerToken } = await createRenderJob({
@@ -233,22 +240,45 @@ router.post(
 // 1d. JSON / Base64 / Remote URL start
 router.post("/start", async (req, res) => {
   try {
-    const { audioBase64, audioRemoteUrl, settings, duration, fps, coverBase64, logoBase64, quality } = req.body;
-    if (!audioBase64 || !audioRemoteUrl) {
-      return res.status(400).json({ error: "audioBase64 veya audioRemoteUrl zorununludur." });
+    const clientIp = getClientIp(req);
+    const quota = dailyQuotaManager.checkAndIncrementRender(clientIp);
+    if (!quota.allowed) {
+      res.setHeader("X-Daily-Quota-Remaining", "0");
+      return res.status(429).json({ 
+        error: `Günlük render kotanıza (${quota.totalLimit} işlem/gün) ulaştınız. Lütfen yarın tekrar deneyin.`,
+        remaining: 0 
+      });
     }
+    res.setHeader("X-Daily-Quota-Remaining", quota.remaining.toString());
+
+    const { audioBase64, audioRemoteUrl, settings, duration, fps, coverBase64, logoBase64, quality } = req.body;
+    if (!audioBase64 && !audioRemoteUrl) {
+      return res.status(400).json({ error: "audioBase64 veya audioRemoteUrl zorunludur." });
+    }
+
     if (audioRemoteUrl && typeof audioRemoteUrl === "string") {
-      if (!isUrlSafe(audioRemoteUrl)) {
-        return res.status(400).json({ error: "Geçersiz veya güvensiz audioRemoteUrl." });
+      if (audioRemoteUrl.startsWith("http://") || audioRemoteUrl.startsWith("https://")) {
+        if (!isUrlSafe(audioRemoteUrl)) {
+          return res.status(400).json({ error: "Geçersiz veya güvensiz audioRemoteUrl." });
+        }
+      } else {
+        // Yerel dosya kontrolü
+        const safeLocal = resolveSafeLocalPath(audioRemoteUrl, path.join(process.cwd(), "public"));
+        if (!safeLocal) {
+          return res.status(400).json({ error: "Geçersiz yerel ses dosyası yolu." });
+        }
       }
     }
+
+    const clampedDuration = duration ? clampDuration(parseFloat(duration)) : undefined;
+    const clampedFps = fps ? clampFps(parseInt(fps, 10)) : 60;
 
     const { jobId, ownerToken } = await createRenderJob({
       audioBase64,
       audioRemoteUrl,
       settings: settings || {},
-      duration: duration ? parseFloat(duration) : undefined,
-      fps: fps || 60,
+      duration: clampedDuration,
+      fps: clampedFps,
       coverBase64,
       logoBase64,
       quality: quality || '1080p'
@@ -344,6 +374,17 @@ router.get("/engine-status", (req, res) => {
 // 7. WebM to MP4 converter
 router.post("/convert-webm-to-mp4", upload.single("video"), async (req, res) => {
   try {
+    const clientIp = getClientIp(req);
+    const quota = dailyQuotaManager.checkAndIncrementRender(clientIp);
+    if (!quota.allowed) {
+      res.setHeader("X-Daily-Quota-Remaining", "0");
+      return res.status(429).json({ 
+        error: `Günlük işlem kotanıza (${quota.totalLimit} işlem/gün) ulaştınız. Lütfen yarın tekrar deneyin.`,
+        remaining: 0 
+      });
+    }
+    res.setHeader("X-Daily-Quota-Remaining", quota.remaining.toString());
+
     if (!req.file) {
       return res.status(400).json({ error: "Dönüştürülecek video dosyası bulunamadı." });
     }

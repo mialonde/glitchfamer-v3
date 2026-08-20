@@ -521,7 +521,8 @@ export class StudioSplitLyricsVisualizer implements IVisualizer {
 
     ctx.translate(x, y);
 
-    const currentTime = audio.time || 0;
+    const syncOffset = settings.lyricsSyncOffset || 0;
+    const currentTime = (audio.time || 0) + syncOffset;
     const bass = audio.bassEnergy ?? audio.kick ?? 0;
 
     // 1. O anki aktif kelimenin satırını bul (Kelime bazlı hassas arama)

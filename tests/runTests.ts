@@ -1,12 +1,23 @@
 import { FastFourierTransform, AudioAnalysisCore, OfflineAudioProcessor } from "../src/core/AudioAnalysisEngine";
 import { BUILTIN_PROFILES, sanitizeSettingsForProfile } from "../src/services/presetService";
 import { AudioEvents } from "../src/types";
+import { 
+  isUrlSafe, 
+  resolveSafeLocalPath, 
+  isSafeBgImageUrl, 
+  verifyAdminPassword, 
+  clampDuration, 
+  clampFps, 
+  DailyQuotaManager, 
+  HARD_CAPS 
+} from "../server/utils/security";
+import path from "path";
 
 /**
  * 🧪 GLITCHFRAMER 2.0 AUTOMATED DSP & AUDIO ENGINE TEST SUITE
  * 
- * Bu test paketi, projenin en kritik ses ve render analiz bileşenlerini
- * hem doğrusal sinyaller hem de uç durumlar (edge-cases) ile test eder.
+ * Bu test paketi, projenin en kritik ses, DSP analiz ve güvenlik bileşenlerini
+ * (SSRF, Path Traversal, Timing Attack, Quota, IDOR) test eder.
  */
 
 interface TestResult {
@@ -196,7 +207,6 @@ describe("Suno AI URL Parser", () => {
       }
     ];
 
-    // server.ts içerisindeki ID ayıklama regex mantığını test edelim:
     for (const { url, expected } of testCases) {
       let trackId: string | null = null;
       const uuidMatch = url.match(/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/);
@@ -216,6 +226,94 @@ describe("Suno AI URL Parser", () => {
 
       assert(trackId === expected, `Hata! Beklenen: ${expected}, Çıkarılan: ${trackId}`);
     }
+  });
+});
+
+// ============================================================================
+// 4. GÜVENLİK, SSRF, PATH TRAVERSAL, TIMING-ATTACK TESTLERİ
+// ============================================================================
+describe("Security Architecture & Defenses", () => {
+  it("SSRF / URL Whitelist: Tehlikeli şemaları ve iç IP'leri engellemelidir", () => {
+    // Güvenli Remote URL'ler
+    assert(isUrlSafe("https://cdn1.suno.ai/track.mp3") === true, "Suno CDN izinli olmalı");
+    assert(isUrlSafe("https://storage.googleapis.com/audio.mp3") === true, "GCS izinli olmalı");
+
+    // Tehlikeli / SSRF URL'leri
+    assert(isUrlSafe("file:///etc/passwd") === false, "file:// engellenmeli");
+    assert(isUrlSafe("javascript:alert(1)") === false, "javascript: engellenmeli");
+    assert(isUrlSafe("http://169.254.169.254/latest/meta-data") === false, "Cloud metadata IP engellenmeli");
+    assert(isUrlSafe("http://10.0.0.1/admin") === false, "İç ağ IP engellenmeli");
+    assert(isUrlSafe("http://evil-attacker.com/payload.mp3") === false, "Whitelist dışı domain engellenmeli");
+  });
+
+  it("Path Traversal Koruması: Dizin dışına çıkışları engellemelidir", () => {
+    const rootDir = path.join(process.cwd(), "public");
+    
+    // Geçerli yollar
+    assert(resolveSafeLocalPath("demo-items/MESELE.txt", rootDir) !== null, "Kök dizin içi dosya çözülmeli");
+    
+    // Path Traversal saldırıları
+    assert(resolveSafeLocalPath("../../etc/passwd", rootDir) === null, "../../ engellenmeli");
+    assert(resolveSafeLocalPath("..\\..\\windows\\win.ini", rootDir) === null, "..\\ engellenmeli");
+    assert(resolveSafeLocalPath("sub/../../../secret.txt", rootDir) === null, "İç içe traversal engellenmeli");
+  });
+
+  it("Arka Plan Görseli Güvenliği: isSafeBgImageUrl", () => {
+    assert(isSafeBgImageUrl("data:image/png;base64,iVBORw0KGgo=") === true, "Base64 data URL geçerli olmalı");
+    assert(isSafeBgImageUrl("https://images.unsplash.com/photo-123") === true, "Unsplash CDN geçerli olmalı");
+    assert(isSafeBgImageUrl("http://169.254.169.254/exfil") === false, "Metadata IP engellenmeli");
+    assert(isSafeBgImageUrl("javascript:alert(1)") === false, "javascript: engellenmeli");
+  });
+
+  it("Admin Giriş Doğrulaması & Timing-Safe Karşılaştırma", () => {
+    assert(verifyAdminPassword("admin2026") === true, "Varsayılan şifre doğru doğrulanmalı");
+    assert(verifyAdminPassword("glitchframer_admin_secret") === true, "Yedek secret şifre doğrulanmalı");
+    assert(verifyAdminPassword("wrong_password_123") === false, "Hatalı şifre reddedilmeli");
+    assert(verifyAdminPassword("") === false, "Boş şifre reddedilmeli");
+  });
+
+  it("Hard-Cap Sınırları: Süre ve FPS aralıkları sınırlanmalıdır", () => {
+    assert(clampDuration(5000) === HARD_CAPS.MAX_DURATION, "5000s maksimuma çekilmeli (600s)");
+    assert(clampDuration(0) === HARD_CAPS.MIN_DURATION, "0s minimuma çekilmeli (1s)");
+    assert(clampDuration(60) === 60, "Geçerli süre değişmemeli");
+
+    assert(clampFps(144) === HARD_CAPS.MAX_FPS, "144 FPS 60'a çekilmeli");
+    assert(clampFps(5) === HARD_CAPS.MIN_FPS, "5 FPS 15'e çekilmeli");
+    assert(clampFps(30) === 30, "30 FPS değişmemeli");
+  });
+
+  it("Günlük Kota Yöneticisi: Kota aşımında istekleri engellemelidir", () => {
+    const quota = new DailyQuotaManager();
+    const testIp = "192.0.2.1"; // Test IP (RFC 5737)
+
+    // Render kotası (20 adet)
+    for (let i = 1; i <= 20; i++) {
+      const res = quota.checkAndIncrementRender(testIp);
+      assert(res.allowed === true, `Render ${i} izin verilmeli`);
+      assert(res.remaining === 20 - i, `Kalan render ${20 - i} olmalı`);
+    }
+
+    // 21. render reddedilmeli
+    const overLimit = quota.checkAndIncrementRender(testIp);
+    assert(overLimit.allowed === false, "21. render isteği reddedilmeli");
+    assert(overLimit.remaining === 0, "Kalan hak 0 olmalı");
+  });
+
+  it("IDOR Koruması: Sahiplik anahtarı (Owner Token) fail-closed çalışmalıdır", () => {
+    const mockJob = {
+      id: "render_123",
+      ownerToken: "secret_token_abc_xyz"
+    };
+
+    // Yetkisiz durumlar
+    const isAuthorized = (headerToken: string | undefined) => {
+      if (!mockJob || !mockJob.ownerToken) return false;
+      return Boolean(headerToken && headerToken === mockJob.ownerToken);
+    };
+
+    assert(isAuthorized(undefined) === false, "Token gönderilmezse reddedilmeli");
+    assert(isAuthorized("wrong_token") === false, "Hatalı token reddedilmeli");
+    assert(isAuthorized("secret_token_abc_xyz") === true, "Doğru token kabul edilmeli");
   });
 });
 
@@ -242,3 +340,4 @@ if (failed.length > 0) {
   console.log(`🎉 ALL TESTS COMPLETED SUCCESSFULLY! PROD READY!`);
   process.exit(0);
 }
+

@@ -2,10 +2,10 @@ import React, { useRef } from 'react';
 import { 
   Music, Disc, Radio, Tv, Smartphone, Layers, 
   Sparkles, Image as ImageIcon, Video, Upload, Trash2, 
-  Check, Play, Pause, RefreshCw, Wand2, Type, Sliders,
-  Scissors, Clock, Flame, Sun, RotateCcw, Volume2
+  Check, Sliders, Scissors, Clock, Flame, Sun, RotateCcw
 } from 'lucide-react';
 import { VisualizerSettings } from '../types';
+import { Button, Badge, Card, Input, Slider } from './ui';
 import { cn } from '../lib/utils';
 
 interface SocialMediaStudioProps {
@@ -218,60 +218,57 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
     <div className="space-y-6 animate-in fade-in-50 duration-150">
       
       {/* 1. BAŞLIK VE AÇIKLAMA */}
-      <div className="bg-gradient-to-r from-[#FFD700]/10 via-black/40 to-transparent border border-accent/20 p-4 rounded-sm">
+      <Card className="p-4 bg-accent/5 border-accent/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Smartphone size={16} className="text-accent" />
-            <h3 className="text-xs font-sans font-bold text-content-primary uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-content-primary uppercase tracking-wider">
               SOSYAL MEDYA MÜZİK KARTLARI STÜDYOSU
             </h3>
           </div>
-          <span className="text-[9px] font-sans text-accent bg-accent/20 px-2 py-0.5 rounded border border-accent font-bold">
+          <Badge variant="accent" className="text-[9px]">
             AKTİF: {activeLayout}
-          </span>
+          </Badge>
         </div>
-        <p className="text-[10px] font-sans text-content-secondary mt-1.5 leading-relaxed">
+        <p className="text-xs text-content-secondary mt-1.5 leading-relaxed">
           TikTok, Instagram Reels, YouTube Shorts ve Spotify Canvas için özel tasarlanmış 12 farklı interaktif müzik kartı şablonu ve sese duyarlı snippet motoru.
         </p>
-      </div>
+      </Card>
 
       {/* 2. AUDIO TRIMMING & SNIPPET STÜDYOSU (ÖZEL KESİT / 15s - 30s - 60s) */}
-      <div className="bg-gradient-to-b from-amber-500/10 via-black/50 to-black/40 border border-amber-500/30 p-4 rounded-sm space-y-3.5 shadow-[0_0_20px_rgba(245,158,11,0.06)]">
+      <Card className="p-4 space-y-4 border-amber-500/30 bg-amber-500/5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
               <Scissors size={13} />
             </div>
             <div>
-              <span className="text-[11px] font-sans font-bold text-amber-400 uppercase tracking-wider block">
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
                 SES KESME & SNIPPET YÖNETİCİSİ (TRIM)
               </span>
-              <span className="text-[8px] font-sans text-content-secondary">
+              <span className="text-[10px] text-content-secondary">
                 Sosyal medya klipleri için istediğiniz şarkı aralığını kesin ve döngüde dinleyin
               </span>
             </div>
           </div>
 
-          <button
+          <Button
             type="button"
+            variant={trimEnabled ? "accent" : "outline"}
+            size="xs"
             onClick={() => onChange({ trimEnabled: !trimEnabled })}
-            className={cn(
-              "px-3 py-1 text-[9px] font-sans font-bold rounded uppercase tracking-wider transition-all border cursor-pointer flex items-center gap-1.5",
-              trimEnabled
-                ? "bg-amber-500/20 text-amber-400 border-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-                : "bg-panel text-content-tertiary border-border-strong hover:text-content-secondary"
-            )}
+            className="text-[9px] font-mono gap-1"
           >
-            {trimEnabled ? <Check size={11} /> : null}
-            {trimEnabled ? "TRIM AKTİF" : "TRIM KAPALI"}
-          </button>
+            {trimEnabled && <Check size={11} />}
+            <span>{trimEnabled ? "TRIM AKTİF" : "TRIM KAPALI"}</span>
+          </Button>
         </div>
 
         {/* Hazır Snippet Süreleri Butonları */}
         <div className="space-y-1.5 pt-1">
-          <label className="text-[8.5px] font-sans text-content-secondary flex items-center justify-between">
+          <label className="text-[10px] text-content-secondary flex items-center justify-between uppercase">
             <span className="flex items-center gap-1"><Clock size={10} className="text-amber-400" /> HIZLI SNIPPET ŞABLONLARI</span>
-            <span className="text-amber-400 font-bold">Kesit: {snippetLength.toFixed(1)} sn</span>
+            <span className="text-amber-400 font-mono font-bold">Kesit: {snippetLength.toFixed(1)} sn</span>
           </label>
           <div className="grid grid-cols-4 gap-1.5">
             {[
@@ -282,9 +279,11 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
             ].map((btn) => {
               const isCurrent = trimEnabled && Math.abs(snippetLength - btn.secs) < 0.5;
               return (
-                <button
+                <Button
                   key={btn.label}
                   type="button"
+                  variant={isCurrent ? "accent" : "outline"}
+                  size="sm"
                   onClick={() => {
                     if (btn.label === 'TÜMÜ') {
                       onChange({
@@ -296,25 +295,20 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
                       setSnippetLength(btn.secs);
                     }
                   }}
-                  className={cn(
-                    "p-2 text-center border rounded-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5",
-                    isCurrent
-                      ? "border-amber-400 bg-amber-400/20 text-content-primary font-bold"
-                      : "border-border-strong bg-panel/60 text-content-secondary hover:border-border-strong hover:text-content-primary"
-                  )}
+                  className="flex flex-col items-center justify-center h-auto py-2 px-1"
                 >
-                  <span className="text-[9.5px] font-sans text-content-primary font-bold">{btn.label}</span>
-                  <span className="text-[7px] font-sans text-content-tertiary">{btn.sub}</span>
-                </button>
+                  <span className="text-[10px] font-bold">{btn.label}</span>
+                  <span className="text-[8px] opacity-70">{btn.sub}</span>
+                </Button>
               );
             })}
           </div>
         </div>
 
         {/* Görsel Timeline & Trim Slider Çift Kulpu */}
-        <div className="space-y-3 pt-2 bg-panel p-3 rounded border border-border-subtle">
+        <div className="space-y-3 pt-2 bg-surface p-3 rounded-lg border border-border-subtle">
           {/* Track Progress Bar Preview */}
-          <div className="relative w-full h-4 bg-surface rounded overflow-hidden flex items-center">
+          <div className="relative w-full h-4 bg-panel rounded overflow-hidden flex items-center border border-border-subtle">
             {/* Trim Highlight Active Window */}
             {duration > 0 && (
               <div 
@@ -336,82 +330,88 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
 
           {/* Başlangıç Saniyesi Slider */}
           <div className="space-y-1">
-            <div className="flex justify-between text-[8.5px] font-sans text-content-secondary">
+            <div className="flex justify-between text-[10px] font-mono text-content-secondary">
               <span>BAŞLANGIÇ (START): <strong className="text-content-primary">{formatSecs(trimStart)}</strong></span>
               <div className="flex items-center gap-1">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   onClick={() => onChange({ trimEnabled: true, trimStart: Math.max(0, trimStart - 1) })}
-                  className="px-1.5 py-0.5 bg-hover hover:bg-hover text-[8px] rounded cursor-pointer"
+                  className="h-5 px-1 text-[8px]"
                 >
                   -1s
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   onClick={() => onChange({ trimEnabled: true, trimStart: Math.min(trimEnd - 0.5, trimStart + 1) })}
-                  className="px-1.5 py-0.5 bg-hover hover:bg-hover text-[8px] rounded cursor-pointer"
+                  className="h-5 px-1 text-[8px]"
                 >
                   +1s
-                </button>
+                </Button>
               </div>
             </div>
-            <input
-              type="range"
+            <Slider
               min={0}
               max={Math.max(1, trimEnd - 0.5)}
               step={0.1}
-              value={trimStart}
-              onChange={(e) => {
+              value={[trimStart]}
+              onValueChange={(val) => {
                 onChange({
                   trimEnabled: true,
-                  trimStart: parseFloat(e.target.value)
+                  trimStart: val[0]
                 });
               }}
-              className="w-full h-1.5 bg-hover rounded appearance-none cursor-pointer accent-amber-400"
             />
           </div>
 
           {/* Bitiş Saniyesi Slider */}
           <div className="space-y-1">
-            <div className="flex justify-between text-[8.5px] font-sans text-content-secondary">
+            <div className="flex justify-between text-[10px] font-mono text-content-secondary">
               <span>BİTİŞ (END): <strong className="text-content-primary">{formatSecs(trimEnd)}</strong></span>
               <div className="flex items-center gap-1">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   onClick={() => onChange({ trimEnabled: true, trimEnd: Math.max(trimStart + 0.5, trimEnd - 1) })}
-                  className="px-1.5 py-0.5 bg-hover hover:bg-hover text-[8px] rounded cursor-pointer"
+                  className="h-5 px-1 text-[8px]"
                 >
                   -1s
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   onClick={() => onChange({ trimEnabled: true, trimEnd: Math.min(maxTrackDuration, trimEnd + 1) })}
-                  className="px-1.5 py-0.5 bg-hover hover:bg-hover text-[8px] rounded cursor-pointer"
+                  className="h-5 px-1 text-[8px]"
                 >
                   +1s
-                </button>
+                </Button>
               </div>
             </div>
-            <input
-              type="range"
+            <Slider
               min={trimStart + 0.5}
               max={maxTrackDuration}
               step={0.1}
-              value={trimEnd}
-              onChange={(e) => {
+              value={[trimEnd]}
+              onValueChange={(val) => {
                 onChange({
                   trimEnabled: true,
-                  trimEnd: parseFloat(e.target.value)
+                  trimEnd: val[0]
                 });
               }}
-              className="w-full h-1.5 bg-hover rounded appearance-none cursor-pointer accent-amber-400"
             />
           </div>
 
           {/* Snippet Playback Action & Loop Toggle */}
           <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
-            <button
+            <Button
               type="button"
+              variant="accent"
+              size="xs"
               onClick={() => {
                 if (onPlayTrimStart) {
                   onPlayTrimStart();
@@ -419,37 +419,35 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
                   onTogglePlay();
                 }
               }}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-sans font-bold text-[9.5px] rounded-sm uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md transition-colors"
+              className="gap-1.5 uppercase font-bold text-[9px]"
             >
               <RotateCcw size={11} />
               KESİTİ BAŞTAN OYNAT
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
+              variant={trimLoop ? "accent" : "outline"}
+              size="xs"
               onClick={() => onChange({ trimLoop: !trimLoop })}
-              className={cn(
-                "px-2.5 py-1 text-[8.5px] font-sans rounded border transition-all cursor-pointer flex items-center gap-1",
-                trimLoop 
-                  ? "bg-amber-500/20 border-amber-500/50 text-amber-400" 
-                  : "bg-surface border-border-strong text-content-tertiary"
-              )}
+              className="text-[9px] font-mono"
             >
-              <RefreshCw size={10} className={trimLoop ? "animate-spin" : ""} />
               {trimLoop ? "DÖNGÜ: AÇIK" : "DÖNGÜ: KAPALI"}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* 3. EN-BOY ORANI SEÇİCİ (ASPECT RATIO) */}
-      <div className="bg-panel border border-white/[0.08] p-4 rounded-sm space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-sans font-bold text-content-secondary uppercase tracking-widest flex items-center gap-1.5">
+          <span className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-1.5">
             <Tv size={12} className="text-accent" />
             EN-BOY ORANI / SOSYAL MEDYA FORMATI
           </span>
-          <span className="text-[8.5px] font-sans text-content-tertiary uppercase">{settings.aspectRatio}</span>
+          <Badge variant="outline" className="text-[9px] uppercase font-mono">
+            {settings.aspectRatio}
+          </Badge>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -460,31 +458,25 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
           ].map((ratio) => {
             const isSelected = settings.aspectRatio === ratio.id;
             return (
-              <button
+              <Button
                 key={ratio.id}
                 type="button"
+                variant={isSelected ? "accent" : "outline"}
                 onClick={() => onChange({ aspectRatio: ratio.id as any })}
-                className={cn(
-                  "p-2.5 text-center border rounded-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1",
-                  isSelected
-                    ? "border-accent bg-accent/10 text-content-primary font-bold"
-                    : "border-border-subtle bg-panel/40 text-content-secondary hover:border-border-strong hover:text-content-primary"
-                )}
+                className="flex flex-col items-center justify-center h-auto py-2.5 px-2"
               >
-                <span className={cn("text-[10px] font-sans", isSelected ? "text-accent" : "text-content-secondary")}>
-                  {ratio.label}
-                </span>
-                <span className="text-[7.5px] font-sans text-content-tertiary">{ratio.sub}</span>
-              </button>
+                <span className="text-xs font-bold">{ratio.label}</span>
+                <span className="text-[9px] opacity-70">{ratio.sub}</span>
+              </Button>
             );
           })}
         </div>
-      </div>
+      </Card>
 
       {/* 4. ŞABLON GALERİSİ (12 ŞABLON SEÇİCİ) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-sans font-bold text-content-secondary uppercase tracking-widest flex items-center gap-1.5">
+          <span className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-1.5">
             <Disc size={12} className="text-accent" />
             MÜZİK KARTI TASARIMINI SEÇİN ({SOCIAL_CARD_TEMPLATES.length} ŞABLON)
           </span>
@@ -495,17 +487,14 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
             const isSelected = activeLayout === tmpl.id;
             const Icon = tmpl.icon;
             return (
-              <button
+              <Card
                 key={tmpl.id}
-                type="button"
-                onClick={() => {
-                  onChange({ cardLayout: tmpl.id as any });
-                }}
+                onClick={() => onChange({ cardLayout: tmpl.id as any })}
                 className={cn(
-                  "p-3 text-left border rounded-sm transition-all cursor-pointer relative overflow-hidden group flex flex-col justify-between min-h-[95px]",
+                  "p-3.5 transition-all cursor-pointer relative overflow-hidden group flex flex-col justify-between min-h-[95px]",
                   isSelected
-                    ? "border-accent bg-accent/10 text-content-primary shadow-[0_0_15px_rgba(255,215,0,0.12)]"
-                    : "border-border-subtle bg-panel/50 text-content-secondary hover:border-border-strong hover:bg-surface/40 hover:text-content-primary"
+                    ? "border-accent bg-accent/5 shadow-md"
+                    : "bg-surface border-border-subtle hover:border-border-strong hover:bg-surface/80"
                 )}
               >
                 <div>
@@ -513,22 +502,22 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
                     <div className="flex items-center gap-1.5">
                       <Icon size={14} style={{ color: tmpl.color }} />
                       <span className={cn(
-                        "text-[10.5px] font-sans font-bold uppercase tracking-wider",
+                        "text-xs font-bold uppercase tracking-wider",
                         isSelected ? "text-accent" : "text-content-primary"
                       )}>
                         {tmpl.title}
                       </span>
                     </div>
-                    <span className="text-[7.5px] font-sans px-1.5 py-0.5 rounded bg-panel border border-white/10 text-content-secondary">
+                    <Badge variant="outline" className="text-[8px]">
                       {tmpl.badge}
-                    </span>
+                    </Badge>
                   </div>
-                  <p className="text-[8.5px] font-sans text-content-secondary leading-relaxed line-clamp-2">
+                  <p className="text-[10px] text-content-secondary leading-relaxed line-clamp-2">
                     {tmpl.desc}
                   </p>
                 </div>
 
-                <div className="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-between text-[7.5px] font-sans text-content-tertiary">
+                <div className="mt-2 pt-2 border-t border-border-subtle flex items-center justify-between text-[9px] text-content-tertiary">
                   <span>Önerilen: {tmpl.recommendedRatio}</span>
                   {isSelected && (
                     <span className="text-accent font-bold flex items-center gap-1">
@@ -536,57 +525,59 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
                     </span>
                   )}
                 </div>
-              </button>
+              </Card>
             );
           })}
         </div>
       </div>
 
       {/* 5. ŞARKI VE SANATÇI BİLGİLERİ */}
-      <div className="bg-panel border border-white/[0.08] p-4 rounded-sm space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-sans font-bold text-content-secondary uppercase tracking-widest flex items-center gap-1.5">
-            <Type size={12} className="text-accent" />
+          <span className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-1.5">
+            <Music size={12} className="text-accent" />
             ŞARKI VE SANATÇI ADI
           </span>
-          <span className="text-[8.5px] font-sans text-content-tertiary uppercase">KART ÜZERİNDE GÖRÜNÜR</span>
+          <Badge variant="outline" className="text-[8px] uppercase">
+            KART ÜZERİNDE GÖRÜNÜR
+          </Badge>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div>
-            <label className="text-[8.5px] font-sans text-content-tertiary block mb-1">ŞARKI BAŞLIĞI (TRACK TITLE)</label>
-            <input
+            <label className="text-[10px] uppercase text-content-tertiary block mb-1">ŞARKI BAŞLIĞI (TRACK TITLE)</label>
+            <Input
               type="text"
               value={settings.trackTitle || ''}
               onChange={(e) => onChange({ trackTitle: e.target.value })}
               placeholder="Örn: DON'T STOP"
-              className="w-full bg-panel border border-white/[0.08] rounded-sm px-3 py-2 text-xs text-content-primary font-sans outline-none focus:border-accent"
+              className="text-xs"
             />
           </div>
 
           <div>
-            <label className="text-[8.5px] font-sans text-content-tertiary block mb-1">SANATÇI ADI (ARTIST NAME)</label>
-            <input
+            <label className="text-[10px] uppercase text-content-tertiary block mb-1">SANATÇI ADI (ARTIST NAME)</label>
+            <Input
               type="text"
               value={settings.artistName || ''}
               onChange={(e) => onChange({ artistName: e.target.value })}
               placeholder="Örn: JERRY J"
-              className="w-full bg-panel border border-white/[0.08] rounded-sm px-3 py-2 text-xs text-content-primary font-sans outline-none focus:border-accent"
+              className="text-xs"
             />
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* 6. ALBÜM KAPAĞI YÖNETİMİ */}
-      <div className="bg-panel border border-white/[0.08] p-4 rounded-sm space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-sans font-bold text-content-secondary uppercase tracking-widest flex items-center gap-1.5">
+          <span className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-1.5">
             <ImageIcon size={12} className="text-accent" />
             ALBÜM KAPAĞI FOTOĞRAFI
           </span>
-          <span className="text-[8.5px] font-sans text-content-tertiary">
+          <Badge variant="outline" className="text-[8px] uppercase">
             {coverUrl ? "YÜKLENDİ" : "VARSAYILAN"}
-          </span>
+          </Badge>
         </div>
 
         <input
@@ -604,7 +595,7 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
         />
 
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 bg-panel border border-white/10 rounded-sm overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+          <div className="w-14 h-14 bg-surface border border-border-subtle rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative">
             {coverUrl ? (
               <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
             ) : (
@@ -614,52 +605,58 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
 
           <div className="flex-1 space-y-1.5">
             <div className="flex gap-2">
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="xs"
                 onClick={() => coverInputRef.current?.click()}
-                className="flex-1 py-1.5 px-3 bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 rounded-sm text-[9px] font-sans font-bold text-content-primary uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                className="flex-1 text-[9px] font-bold uppercase tracking-wider gap-1.5"
               >
                 <Upload size={11} />
                 {coverUrl ? "KAPAĞI DEĞİŞTİR" : "KAPAK YÜKLE"}
-              </button>
+              </Button>
 
               {coverUrl && (
-                <button
+                <Button
                   type="button"
+                  variant="destructive"
+                  size="xs"
                   onClick={() => onCoverChange(null)}
-                  className="py-1.5 px-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-sm text-[9px] font-sans font-bold text-red-400 uppercase tracking-wider cursor-pointer transition-colors"
+                  className="px-2.5 text-[9px]"
                 >
                   <Trash2 size={11} />
-                </button>
+                </Button>
               )}
             </div>
-            <p className="text-[8px] font-sans text-content-tertiary">
+            <p className="text-[9px] text-content-tertiary">
               Plak, CD, Kaset, Polaroid ve Kart şablonlarının merkezinde yer alır.
             </p>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* 7. VİSUALİZER VE ARKA PLAN ATMOSFERİ */}
-      <div className="bg-panel border border-white/[0.08] p-4 rounded-sm space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-sans font-bold text-content-secondary uppercase tracking-widest flex items-center gap-1.5">
+          <span className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles size={12} className="text-accent" />
             ARKA PLAN VİSUALİZER & RENK
           </span>
-          <span className="text-[8.5px] font-sans text-content-tertiary">
+          <Badge variant="outline" className="text-[8px] uppercase">
             {settings.mode === 'NONE' ? "SADECE ŞABLON" : settings.mode}
-          </span>
+          </Badge>
         </div>
 
         {/* Visualizer Arka Planda Çalışsın mı? */}
-        <div className="flex items-center justify-between bg-panel/60 p-2.5 rounded-sm border border-white/[0.05]">
+        <div className="flex items-center justify-between bg-surface p-2.5 rounded-lg border border-border-subtle">
           <div className="flex flex-col">
-            <span className="text-[9px] font-sans font-bold text-content-secondary uppercase">ARKA PLAN VİSUALİZERİ</span>
-            <span className="text-[8px] font-sans text-content-tertiary">Kartın arkasında parçacık ve tüneller çalışır</span>
+            <span className="text-[10px] font-bold text-content-secondary uppercase">ARKA PLAN VİSUALİZERİ</span>
+            <span className="text-[9px] text-content-tertiary">Kartın arkasında parçacık ve tüneller çalışır</span>
           </div>
-          <button
+          <Button
             type="button"
+            variant={settings.mode !== 'NONE' ? "accent" : "outline"}
+            size="xs"
             onClick={() => {
               if (settings.mode === 'NONE') {
                 onChange({ mode: 'NEON_TUNNEL' });
@@ -667,22 +664,17 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
                 onChange({ mode: 'NONE' });
               }
             }}
-            className={cn(
-              "px-3 py-1.5 text-[8.5px] font-sans font-bold rounded uppercase tracking-wider transition-all border cursor-pointer",
-              settings.mode !== 'NONE'
-                ? "bg-accent/20 text-accent border-accent/60"
-                : "bg-panel text-content-tertiary border-border-strong hover:text-content-secondary"
-            )}
+            className="text-[9px] font-mono"
           >
             {settings.mode !== 'NONE' ? "AKTİF (AÇIK)" : "KAPALI (SADECE KART)"}
-          </button>
+          </Button>
         </div>
 
         {/* Renk Seçimi */}
-        <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
+        <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
           <div className="flex flex-col">
-            <span className="text-[9px] font-sans font-bold text-content-secondary uppercase">VURGU & IŞIMA RENGİ</span>
-            <span className="text-[8px] font-sans text-content-tertiary">{settings.primaryColor}</span>
+            <span className="text-[10px] font-bold text-content-secondary uppercase">VURGU & IŞIMA RENGİ</span>
+            <span className="text-[9px] font-mono text-content-tertiary">{settings.primaryColor}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {['#FFD700', '#00F0FF', '#E8590C', '#E11D48', '#C084FC', '#1DB954', '#38BDF8', '#FFFFFF'].map((color) => (
@@ -694,30 +686,32 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
                 className={cn(
                   "w-5 h-5 rounded-full border transition-all cursor-pointer",
                   settings.primaryColor === color
-                    ? "scale-125 border-white ring-2 ring-white/30"
+                    ? "scale-125 border-white ring-2 ring-accent/30 shadow-md"
                     : "border-transparent opacity-70 hover:opacity-100"
                 )}
               />
             ))}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* 8. SİNEMATİK ARKA PLAN VİDEO DÖNGÜLERİ */}
-      <div className="bg-panel border border-white/[0.08] p-4 rounded-sm space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-sans font-bold text-content-secondary uppercase tracking-widest flex items-center gap-1.5">
+          <span className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-1.5">
             <Video size={12} className="text-accent" />
             HAZIR SİNEMATİK VİDEO DÖNGÜLERİ (CANVAS BG)
           </span>
           {bgVideoUrl && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               onClick={() => onBgVideoChange(null)}
-              className="text-[8px] font-sans text-red-400 hover:underline cursor-pointer"
+              className="text-[9px] text-destructive hover:text-destructive h-5 p-0"
             >
               VİDEOYU KALDIR
-            </button>
+            </Button>
           )}
         </div>
 
@@ -725,25 +719,22 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
           {EUPHORIC_VIDEO_PRESETS.map((vid) => {
             const isCurrent = bgVideoUrl === vid.url;
             return (
-              <button
+              <Button
                 key={vid.name}
                 type="button"
+                variant={isCurrent ? "accent" : "outline"}
                 onClick={() => onBgVideoChange(vid.url)}
-                className={cn(
-                  "p-2 text-left border rounded-sm transition-all cursor-pointer",
-                  isCurrent
-                    ? "border-accent bg-accent/10 text-content-primary font-bold"
-                    : "border-border-subtle bg-panel/40 text-content-secondary hover:border-border-strong hover:text-content-primary"
-                )}
+                className="flex flex-col items-start justify-center h-auto py-2 px-2.5 text-left"
               >
-                <div className="text-[9px] font-sans font-bold uppercase truncate">{vid.name}</div>
-                <div className="text-[7.5px] font-sans text-content-tertiary truncate">{vid.desc}</div>
-              </button>
+                <div className="text-[10px] font-bold uppercase truncate w-full">{vid.name}</div>
+                <div className="text-[8px] opacity-70 truncate w-full">{vid.desc}</div>
+              </Button>
             );
           })}
         </div>
-      </div>
+      </Card>
 
     </div>
   );
 };
+

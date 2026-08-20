@@ -15,6 +15,111 @@
 
 ## 🕒 2. İlerleme Logu & Değişiklik Geçmişi (Progress & Change Log)
 
+### [2026-08-20 - Oturum 79] - 3 Kademeli Deneyim Mimarisi (Auto-Magic, Creator, Pro Studio) & Otomatik BPM/Enerji Analiz Motoru
+- **Kullanıcı Talimatı:**
+  - "Kullanıcı sesi ekrana bıraktığı an, sistem arka planda şarkının temposunu (BPM) ve enerjisini saniyeler içinde analiz eder. Kullanıcıya hiçbir ince ayar sormadan, parçanın ritmine en uygun görselleştiriciyi, renk paletini ve hazır şablonu otomatik uygular. Ekranda sadece koca bir 'Dışa Aktar' tuşu yanar."
+  - "En baz özelliğimiz böyle olmalı. Sonra creator için Presetlerin olduğu ekran, son olarak profesyoneller için ise en gelişmiş ekranımız gelmeli. Böylelikle her kesime hitap etmeli. Suno'dan içe aktarma her ekranda olmalı."
+- **Yapılan İyileştirmeler & Mimari Katmanlar:**
+  1. **Akıllı Web Audio PCM Tampon Analizcisi (`src/utils/audioAnalyzer.ts`)**:
+     - Ses dosyası veya Blob sisteme bırakıldığı an alt-saniye seviyesinde Web Audio PCM kod çözümü ve FFT frekans spektrumu analizini yürütür.
+     - Şarkının temposunu (BPM), toplam RMS enerjisini, Bas / Tiz / Vokal oranlarını hesaplayarak müzik türü arketipini (Cyberpunk EDM, Synthwave, Vokal Pop, Lo-Fi Chill, Sinematik Rock) belirler.
+     - Şarkıya en uygun Visualizer modunu, ana/yanikil renk paletini, kamera sarsıntısını ve bloom efektlerini otomatik türetip uygular.
+  2. **Level 1: ⚡ Auto-Magic Katmanı (`src/components/AutoMagicLayer.tsx`)**:
+     - Sürükle-Bırak (Drag & Drop) duyarlı tam ekran ses yükleme alanı.
+     - Otomatik analiz durumu ve tespit edilen parça metriklerini (BPM, Enerji %, Müzik Türü) gösteren dinamik rozetler.
+     - Kullanıcıya karmaşık ayarlar sormadan doğrudan canlı önizlemenin yanında beliren **KOCA PARLAYAN "DIŞA AKTAR" (60 FPS MP4 VİDEO)** butonu.
+     - Suno AI Bağlantı İçe Aktarma ve Demo Müzik yükleme kısayolları.
+  3. **Level 2: 🎨 Creator Katmanı (`src/components/CreatorLayer.tsx`)**:
+     - Küratörlü görsel şablon kartları (Curated Looks) kütüphanesi grid düzeni.
+     - Hızlı format değiştirme butonları (16:9 YouTube, 9:16 TikTok/Reels, 1:1 Instagram).
+     - Kolay medya (ses, kapak görseli) seçimi ve hızlı render barı.
+  4. **Level 3: 🎛️ Pro Studio Katmanı (`src/App.tsx` & `src/components/StudioTopBar.tsx`)**:
+     - 39+ Visualizer modu, Sosyal Medya kartları, Effects DSP Shader motoru, Lyrics Studio, Medya & 3D Avatarlar, Preset yöneticisi ve FFmpeg 60FPS render sekmesini kapsayan tam donanımlı stüdyo katmanı.
+  5. **Her Ekranda Kesintisiz Suno AI Entegrasyonu**:
+     - Bütün modlarda (Otomatik, Creator, Pro Studio) üst çubukta ve medya panellerinde `"Suno'dan İçe Aktar"` butonu konumlandırıldı; URL veya ham JSON verisiyle anında ses, kapak ve kelime bazlı senkronize liriklerin aktarımı sağlandı.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı (0 hata).
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+- **Kullanıcı Talimatı:**
+  - "buradaki hızlı render sekmesini glitchframer - hızlı başlat altına sabitle."
+- **Yapılan İyileştirmeler:**
+  1. **QuickStartLayer Düzen Düzenlemesi (`src/components/QuickStartLayer.tsx`)**:
+     - `GlitchFramer - Hızlı Başlat` başlığının hemen altına özel `Hızlı Render` kontrol barı sabitlendi (`shrink-0`, `border-b`, `bg-surface/70`).
+     - Render durumları (boşta, render alınıyor, MP4 hazır, hata durumu) başlığın altında net ve şık bir hiyerarşiyle konumlandırıldı.
+     - Önizleme sahnesi (sol panel) altındaki gereksiz çubuk kaldırılarak sahne merkezileştirildi ve ferah bir görselleştirme alanı sağlandı.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı (0 hata).
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 77] - Phase 1 (Acil Güvenlik) & Phase 2 (Stabilizasyon & Test Paketi) Mega Entegrasyonu
+- **Kullanıcı Talimatı:**
+  - "Phase 1 — Acil (Güvenlik & Production Blocker): isUrlSafe() path traversal düzeltmesi, tek ortak dosyaya taşıma (#1, #12). Admin kimlik bilgilerini env'e taşıma + rotasyon (#2). bgImageUrl için whitelist doğrulama (#4). duration/totalFrames için sunucu tarafı hard-cap; anonim kullanıcı için render/lyrics günlük kota (#3)."
+  - "Phase 2 — Stabilizasyon: chunked_uploads temizlik cron'unu rekürsif hale getirme (#7). Dış fetch() çağrılarına timeout ekleme (#11). Kritik route'lar için test paketi yazma (auth, IDOR, path traversal regresyonu) (#13). SECURITY.md/KNOWN_ISSUES.md dokümanlarını gerçek koda göre güncelleme (#14)."
+- **Uygulanan Güvenlik ve Mimari Değişiklikler:**
+  1. **Merkezi Güvenlik Modülü (`server/utils/security.ts`)**:
+     - `isUrlSafe`: HTTP/HTTPS şema kontrolü, RFC 1918 / Cloud Metadata (`169.254.169.254`) IP engeli ve Suno/GCS whitelist filtresi.
+     - `resolveSafeLocalPath` / `isSafeLocalPath`: Path Traversal (`../`, `..\`, `\0`) saldırılarını kökten engelleyen mutlak taban dizin doğrulaması.
+     - `isSafeBgImageUrl`: Base64 MIME tipleri (PNG, JPEG, WEBP, GIF), Unsplash/Pexels/Pixabay/Cloudinary/Imgur/Suno CDN whitelist denetimi ve tehlikeli şemaların engellenmesi.
+     - `verifyAdminPassword`: `crypto.timingSafeEqual` ile zamanlama saldırılarına (timing attacks) karşı korumalı, `ADMIN_PASSWORD_HASH` ve `ADMIN_PASSWORD` / `ADMIN_SECRET` env değişkenleri ve rotasyon destekli doğrulama.
+     - `clampDuration`, `clampFps`, `clampTotalFrames`: Sunucu tarafı hard-cap sınırları (1s - 600s süre, 15 - 60 FPS, maks 36.000 kare).
+     - `fetchWithTimeout`: Dış ağ isteklerinde (Suno API, uzaktan ses indirme) `AbortController` tabanlı 10-15 saniyelik zaman aşımı sınırı.
+     - `DailyQuotaManager`: Anonim kullanıcılar için IP bazlı günlük kota yönetimi (Günde 20 render, 50 AI lirik senkronizasyonu) ve `X-Daily-Quota-Remaining` başlıkları.
+  2. **Tüm Sunucu Rotalarının ve Render Motorunun Refaktörü**:
+     - `server/routes/admin.ts`: Env tabanlı timing-safe admin girişi ve oturum yönetimi.
+     - `server/routes/render.ts`: Günlük kota kontrolü, hard-cap süre/FPS sınırlamaları, IDOR `x-owner-token` denetimi ve güvenli dosya birleştirme.
+     - `server/routes/suno.ts`: SSRF korumalı merkezi URL denetimi ve zaman aşımlı fetch.
+     - `server/routes/lyrics.ts`: Gemini AI şarkı sözü isteklerinde günlük kota yönetimi ve zaman aşımlı hata yönetimi.
+     - `server/renderEngine.ts`: `bgImageUrl` whitelist doğrulaması, hard-cap kare hesaplaması ve `chunked_uploads` alt klasörlerini de süpüren rekürsif zamanlı temizlik cron'u.
+  3. **Kapsamlı Otomatik Test Paketi (`tests/runTests.ts`)**:
+     - DSP FFT analizi (100Hz kick, 8000Hz hi-hat, adaptif beat tespiti, sessizlik kontrolü).
+     - Preset yapılandırma ve sanitizasyon.
+     - Suno URL ve Track ID UUID ayrıştırıcı.
+     - SSRF / URL whitelist ve metadata IP engeli testleri.
+     - Path traversal regresyon testleri.
+     - Arka plan görseli whitelist testleri.
+     - Admin şifre doğrulama ve timing-safe karşılaştırma testleri.
+     - Hard-cap sınırları (duration, FPS) testleri.
+     - Günlük kota yöneticisi sınır aşımı (20 render limit) testleri.
+     - IDOR sahiplik anahtarı (Owner Token) fail-closed testleri.
+     - Toplam 15/15 test %100 başarılı.
+  4. **Dokümantasyon Güncellemeleri**:
+     - `SECURITY.md` ve `KNOWN_ISSUES.md` güncel güvenlik mimarisine göre tamamen yenilendi.
+- **Derleme & Doğrulama:**
+  - Test Paketi (`npm test`): 15/15 test başarılı (%100 PASS).
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı (0 hata).
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 76] - @shadcn-coding-skill Mega Refactoring & LyricsStudio Modularization
+- **Kullanıcı Talimatı:**
+  - "önceki ve sonraki tüm kodlamaları bu coding skill e göre yap." / "Tamam şimdi bir önceki skill dosyasına göre mega güncellemeye başla."
+- **Yapılan İyileştirmeler & Modüler Refaktör:**
+  1. **UI İlkel Bileşen Standartları (`src/components/ui/`)**:
+     - `Button`, `Card`, `Badge`, `Input`, `Slider` ve `cn()` yardımcıları tam tip güvenliğiyle standartlaştırıldı.
+  2. **`LyricsStudio.tsx` Modüler Ayrıştırması & Refaktörü**:
+     - 1500+ satırlık devasa tekil dosya, `@shadcn-coding-skill` ve modülerlik yönergelerine uygun olarak küçük, birleştirilebilir ve odaklı alt bileşenlere ayrıştırıldı:
+       - `src/components/lyrics/LyricsHeader.tsx`: Üst başlık çubuğu, lirik aç/kapa düğmesi, canlı çalan satır takibi ve transport mini player.
+       - `src/components/lyrics/LyricsTimeline.tsx`: İnteraktif zaman çizelgesi, canlı dokun (Live Tap), şarkı yapıları arındırma ve global zaman öteleme.
+       - `src/components/lyrics/LyricsCardList.tsx`: Ergonomik lirik kartları, satır önizleme, hece/zaman damgası düzenleme, mikro nudge ve enstrümantal boşluk tespiti.
+       - `src/components/lyrics/LyricsStyleTab.tsx`: 8 farklı tipografi ve animasyon stili, serbest %Y/%X konumlandırma, font ve glow parametreleri, BetterLyrics efekt kontrolleri ve renk paleti.
+       - `src/components/lyrics/LyricsSunoTab.tsx`: Suno AI otomatik lirik çekici, .LRC dosya yükleyici, profesyonel dışa aktarma araçları (.LRC, .ELRC, .TTML, .JSON, .SRT, .VTT) ve ham LRC editörü.
+       - `src/components/lyrics/LyricsAutoSyncTab.tsx`: Şarkı süresine göre akıllı otomatik süre dağıtıcı.
+  3. **Tüm Stüdyo Bileşenlerinin `@shadcn-coding-skill` ile Uyumu**:
+     - `EffectsStudio.tsx`, `ExportTab.tsx`, `StudioTopBar.tsx`, `StudioTransportBar.tsx`, `TemplatePickerModal.tsx`, `ReleasePackStudioModal.tsx`, `SunoImporter.tsx`, `PostRenderFeedbackModal.tsx`, `DSPMasteringPanel.tsx`, `AppHeader.tsx`, `AdminDashboard.tsx`, `MediaTab.tsx`, `PresetManager.tsx`, `SocialMediaStudio.tsx`, `QuickStartLayer.tsx` ve `StyleGuide.tsx` bileşenlerinin tamamı shadcn ilkel bileşenleriyle modernize edildi.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı (0 hata).
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 75] - @shadcn-coding-skill Standartlarının Benimsenmesi
+- **Kullanıcı Talimatı:**
+  - "önceki ve sonraki tüm kodlamaları bu coding skill e göre yap." (@shadcn-coding-skill)
+- **Yapılan İyileştirmeler & Standart Entegrasyonu:**
+  1. `AGENTS.md` dosyası güncellenerek `@shadcn-coding-skill` prensipleri (küçük ve birleştirilebilir bileşenler, TypeScript-first tip güvenliği, `cn()` ile dinamik Tailwind sınıf yönetimi, yalın ve rafine estetik, temiz içe aktarmalar ve gürültüsüz diff'ler) kalıcı mimari kuralı olarak sisteme eklendi.
+  2. Tüm mevcut ve gelecekteki kodlama, arayüz ve refaktör işlemlerinin bu kılavuza tam uyumlu yürütülmesi taahhüt edildi.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+
 ### [2026-08-20 - Oturum 74] - GitHub Import Migration, Lock File Cleanup & Validation
 - **Görev & İstek:**
   - AI Studio GitHub Import Migration protokolünün (`/skills/system_skills/github_import_migration/SKILL.md`) uygulanması ve projenin platform üzerinde doğrulanması.

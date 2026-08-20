@@ -13,6 +13,8 @@ import { TemplatePickerModal } from "./components/TemplatePickerModal";
 import { ReleasePackStudioModal } from "./components/ReleasePackStudioModal";
 import { PostRenderFeedbackModal } from "./components/PostRenderFeedbackModal";
 import { QuickStartLayer } from "./components/QuickStartLayer";
+import { AutoMagicLayer } from "./components/AutoMagicLayer";
+import { CreatorLayer } from "./components/CreatorLayer";
 import { AdminDashboard } from "./components/AdminDashboard";
 
 // Modular Sub-Components
@@ -29,10 +31,10 @@ import { audioEngine } from "./core/AudioEngine";
 import { cn } from "./lib/utils";
 
 type StudioTab = 'visualizer' | 'social' | 'effects' | 'lyrics' | 'media' | 'presets' | 'export';
-type UILayer = 'QUICK_START' | 'STUDIO' | 'ADMIN';
+type UILayer = 'AUTO_MAGIC' | 'CREATOR' | 'STUDIO' | 'ADMIN' | 'QUICK_START';
 
 export default function App() {
-  const [uiLayer, setUiLayer] = useState<UILayer>('QUICK_START');
+  const [uiLayer, setUiLayer] = useState<UILayer>('AUTO_MAGIC');
   const [activeTab, setActiveTab] = useState<StudioTab>('visualizer');
   const [studioTabs, setStudioTabs] = useState<StudioTabConfig[]>(INITIAL_TABS);
   const [stepGuideActive, setStepGuideActive] = useState(true);
@@ -881,9 +883,9 @@ export default function App() {
     />
   );
 
-  if (uiLayer === 'ADMIN') return <AdminDashboard onClose={() => setUiLayer('STUDIO')} />;
+  if (uiLayer === 'ADMIN') return <AdminDashboard onClose={() => setUiLayer('AUTO_MAGIC')} />;
 
-  if (uiLayer === 'QUICK_START') {
+  if (uiLayer === 'AUTO_MAGIC' || uiLayer === 'QUICK_START') {
     return (
       <main className="h-screen w-screen bg-app text-content-primary flex flex-col overflow-hidden font-sans selection:bg-accent-muted selection:text-accent">
         {hasSavedSession && savedSessionData && (
@@ -913,24 +915,88 @@ export default function App() {
           <audio ref={audioRef} src={audioUrl} crossOrigin="anonymous" onEnded={() => setIsPlaying(false)} />
         )}
         
-        <QuickStartLayer 
+        <AutoMagicLayer 
           settings={settings}
           onUpdateSettings={(s) => setSettings(prev => ({...prev, ...s}))}
           audioUrl={audioUrl}
-          onAudioSelect={(url) => {
-            setAudioUrl(url);
-            setAudioFileName('Audio Track');
+          audioFileName={audioFileName}
+          onAudioSelect={(fileOrUrl) => {
+            if (typeof fileOrUrl === 'string') {
+              setAudioUrl(fileOrUrl);
+              setAudioFileName('Audio Track');
+            } else {
+              const url = URL.createObjectURL(fileOrUrl);
+              setAudioUrl(url);
+              setAudioFileBlob(fileOrUrl);
+              setAudioFileName(fileOrUrl.name);
+            }
           }}
           coverUrl={coverUrl}
-          onCoverSelect={setCoverUrl}
+          onCoverSelect={(file) => {
+            const url = URL.createObjectURL(file);
+            setCoverUrl(url);
+            setCoverFileBlob(file);
+          }}
           isServerRendering={isServerRendering}
           serverProgress={serverProgress}
           serverStage={serverStage}
           serverVideoUrl={serverVideoUrl}
           serverError={serverError}
           onRenderClick={startServerRender}
-          onAdvancedClick={() => setUiLayer('STUDIO')}
-          onAdminClick={() => setUiLayer('ADMIN')}
+          onOpenSunoModal={() => setIsSunoModalOpen(true)}
+          onOpenReleasePackModal={() => setIsReleasePackModalOpen(true)}
+          onSwitchToCreator={() => setUiLayer('CREATOR')}
+          onSwitchToPro={() => setUiLayer('STUDIO')}
+          onSwitchToAdmin={() => setUiLayer('ADMIN')}
+          onLoadDemoTrack={loadDemoTrack}
+          canvasNode={visualizerCanvasNode}
+          isPlaying={isPlaying}
+          onTogglePlay={togglePlay}
+        />
+      </main>
+    );
+  }
+
+  if (uiLayer === 'CREATOR') {
+    return (
+      <main className="h-screen w-screen bg-app text-content-primary flex flex-col overflow-hidden font-sans selection:bg-accent-muted selection:text-accent">
+        {audioUrl && (
+          <audio ref={audioRef} src={audioUrl} crossOrigin="anonymous" onEnded={() => setIsPlaying(false)} />
+        )}
+
+        <CreatorLayer
+          settings={settings}
+          onUpdateSettings={(s) => setSettings(prev => ({...prev, ...s}))}
+          audioUrl={audioUrl}
+          audioFileName={audioFileName}
+          onAudioSelect={(fileOrUrl) => {
+            if (typeof fileOrUrl === 'string') {
+              setAudioUrl(fileOrUrl);
+              setAudioFileName('Audio Track');
+            } else {
+              const url = URL.createObjectURL(fileOrUrl);
+              setAudioUrl(url);
+              setAudioFileBlob(fileOrUrl);
+              setAudioFileName(fileOrUrl.name);
+            }
+          }}
+          coverUrl={coverUrl}
+          onCoverSelect={(file) => {
+            const url = URL.createObjectURL(file);
+            setCoverUrl(url);
+            setCoverFileBlob(file);
+          }}
+          isServerRendering={isServerRendering}
+          serverProgress={serverProgress}
+          serverStage={serverStage}
+          serverVideoUrl={serverVideoUrl}
+          serverError={serverError}
+          onRenderClick={startServerRender}
+          onOpenSunoModal={() => setIsSunoModalOpen(true)}
+          onSwitchToAutoMagic={() => setUiLayer('AUTO_MAGIC')}
+          onSwitchToPro={() => setUiLayer('STUDIO')}
+          onSwitchToAdmin={() => setUiLayer('ADMIN')}
+          onLoadDemoTrack={loadDemoTrack}
           canvasNode={visualizerCanvasNode}
         />
       </main>
@@ -1001,6 +1067,8 @@ export default function App() {
         onOpenAdmin={() => setUiLayer('ADMIN')}
         onOpenSuno={() => setIsSunoModalOpen(true)}
         onLoadDemo={loadDemoTrack}
+        onSwitchToAutoMagic={() => setUiLayer('AUTO_MAGIC')}
+        onSwitchToCreator={() => setUiLayer('CREATOR')}
       />
 
       {/* 🎛️ 2. ANA STÜDYO ALANI (SPLIT VIEWPORT + TABBED INSPECTOR) */}

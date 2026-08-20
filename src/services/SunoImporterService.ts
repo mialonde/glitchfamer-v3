@@ -271,7 +271,7 @@ export class SunoImporterService {
     syncedLines: SyncedLine[];
     hasWordLevelTimestamps: boolean;
   } {
-    const extractedWords: SunoWordTimestamp[] = [];
+    const extractedWords: (SunoWordTimestamp & { hasNewline?: boolean })[] = [];
     const timelineWords: SunoTimelineWord[] = [];
 
     // Durum 1: Suno Alignment / Word Timestamps dizisi mevcutsa
@@ -292,8 +292,13 @@ export class SunoImporterService {
           ? item.end 
           : (typeof item.end_s === 'number' ? item.end_s : (item.endTime ?? (startTime + 0.35)));
 
-        if (!text || !text.trim()) continue;
+        if (!text) continue;
+        
+        // Satır sonu karakteri içerip içermediğini kontrol et (trilmeden önce)
+        const hasNewline = /\n|\r/.test(text);
         const rawWord = text.trim();
+
+        if (!rawWord) continue;
 
         // Tek başına direkt yapı belirteci ise atla ([Verse], [Chorus], (Solo), vb.)
         if (isStructureMarkerToken(rawWord)) {
@@ -352,14 +357,15 @@ export class SunoImporterService {
         const s = Math.max(0, Math.round(startTime * 100) / 100);
         const e = Math.max(s + 0.1, Math.round(endTime * 100) / 100);
 
-        extractedWords.push({ text: cleanWord, startTime: s, endTime: e });
+        extractedWords.push({ text: cleanWord, startTime: s, endTime: e, hasNewline });
         timelineWords.push({ word: cleanWord, startTime: s, endTime: e });
       }
     }
 
     // Eğer word-level timestamps başarıyla alındıysa
     if (extractedWords.length > 0) {
-      const groupedLines = this.groupWordsIntoLines(timelineWords);
+      // Prompt içerisindeki yazılı satırlarla hizala veya kelime akışından grup oluştur
+      const groupedLines = this.alignWordsWithPrompt(rawPrompt, extractedWords, timelineWords);
       const enrichedLines = phonemeEngine.enrichLyricsWithPhonemes(groupedLines);
       return {
         words: extractedWords,
@@ -421,9 +427,98 @@ export class SunoImporterService {
   }
 
   /**
+   * Suno'nun kelime bazlı zamanlamalarını (extractedWords) şarkının orijinal prompt satırlarıyla (rawPrompt)
+   * %100 birebir eşleştirir. Prompt bulunamazsa kelime akışındaki \n işaretleri ve vokal esleri kullanır.
+   */
+  private alignWordsWithPrompt(
+    rawPrompt: string,
+    extractedWords: (SunoWordTimestamp & { hasNewline?: boolean })[],
+    timelineWords: SunoTimelineWord[]
+  ): SyncedLine[] {
+    const cleanPrompt = this.cleanSunoLyricsPrompt(rawPrompt);
+    const promptLines = cleanPrompt
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !isStructureMarkerToken(l));
+
+    let rawLines: SyncedLine[] = [];
+
+    // Strateji A: Eğer yazılı prompt satırları mevcutsa ve kelimeler uyuşuyorsa, doğrudan prompt satırlarına bağla
+    if (promptLines.length > 0 && extractedWords.length > 0) {
+      let wordIdx = 0;
+
+      for (let l = 0; l < promptLines.length; l++) {
+        const lineText = promptLines[l];
+        const targetWords = lineText.split(/\s+/).filter(w => Boolean(w) && !isStructureMarkerToken(w));
+        if (targetWords.length === 0) continue;
+
+        const lineMatchedWords: SyncedWord[] = [];
+        const maxTake = targetWords.length;
+
+        for (let w = 0; w < maxTake && wordIdx < extractedWords.length; w++) {
+          const matched = extractedWords[wordIdx];
+          lineMatchedWords.push({
+            word: matched.text,
+            startTime: matched.startTime,
+            endTime: matched.endTime
+          });
+          wordIdx++;
+        }
+
+        if (lineMatchedWords.length > 0) {
+          rawLines.push({
+            startTime: lineMatchedWords[0].startTime,
+            endTime: lineMatchedWords[lineMatchedWords.length - 1].endTime,
+            text: lineText,
+            words: lineMatchedWords
+          });
+        }
+      }
+
+      // Kalan kelimeleri de en son satıra ekle veya grup oluştur
+      if (wordIdx < extractedWords.length && rawLines.length > 0) {
+        const lastLine = rawLines[rawLines.length - 1];
+        while (wordIdx < extractedWords.length) {
+          const extra = extractedWords[wordIdx];
+          if (lastLine.words) {
+            lastLine.words.push({ word: extra.text, startTime: extra.startTime, endTime: extra.endTime });
+          }
+          lastLine.endTime = extra.endTime;
+          lastLine.text += " " + extra.text;
+          wordIdx++;
+        }
+      }
+    }
+
+    // Strateji B: Eğer prompt eşleşmediyse veya prompt yoksa, gelişmiş kelime akış motoru kullan
+    if (rawLines.length === 0) {
+      rawLines = this.groupWordsIntoLines(extractedWords);
+    }
+
+    // ADIM 3: Satır Bitiş Sürelerini (endTime) Yumuşat ve Kesintisiz Akış Sağla
+    for (let i = 0; i < rawLines.length; i++) {
+      const curr = rawLines[i];
+      const next = rawLines[i + 1];
+
+      if (next) {
+        // Sonraki satır başlamadan hemen öncesine kadar satırı ekranda pürüzsüz tut (maksimum +2.2s tutma süresi)
+        const maxHold = (curr.words && curr.words.length > 0)
+          ? curr.words[curr.words.length - 1].endTime + 2.2
+          : curr.startTime + 5.0;
+        
+        curr.endTime = Math.round(Math.min(next.startTime - 0.08, Math.max(curr.endTime, maxHold)) * 100) / 100;
+      } else {
+        curr.endTime = Math.round((curr.endTime + 2.5) * 100) / 100;
+      }
+    }
+
+    return rawLines;
+  }
+
+  /**
    * Kelime bazlı timestamp dizisini doğal şarkı satırlarına gruplar.
    */
-  private groupWordsIntoLines(words: SunoTimelineWord[]): SyncedLine[] {
+  private groupWordsIntoLines(words: (SunoWordTimestamp & { hasNewline?: boolean })[]): SyncedLine[] {
     if (!words || words.length === 0) return [];
 
     const rawLines: SyncedLine[] = [];
@@ -435,24 +530,24 @@ export class SunoImporterService {
       const next = words[i + 1];
 
       // Yapı belirteçlerini satıra dahil etme
-      if (!isStructureMarkerToken(curr.word)) {
+      if (!isStructureMarkerToken(curr.text)) {
         currentLineWords.push({
-          word: curr.word,
+          word: curr.text,
           startTime: curr.startTime,
           endTime: curr.endTime
         });
       }
 
-      // Satır sonu kriterleri (xiliourt / Lumi-Script standartları):
-      // 1. İki kelime arasında 0.85s üzerinde vokal nefes/ara boşluğu varsa
-      // 2. Satırda 7 veya daha fazla kelime birikmişse ve ufak bir duraklama varsa
-      // 3. Cümle bitiş noktalama işareti (., !, ?, ,, ;, :)
-      const isPause = next && (next.startTime - curr.endTime >= 0.85);
-      const isLongEnough = currentLineWords.length >= 7;
-      const isEndOfPunctuation = /[.!?]$/.test(curr.word);
+      // Satır sonu kriterleri:
+      // 1. Kelime verisinde açık \n (newline) sinyali varsa
+      // 2. İki kelime arasında 0.35s üzerinde vokal es/duraklama varsa
+      // 3. Cümle bitiş noktalaması (. ! ?)
+      const isExplicitNewline = Boolean(curr.hasNewline);
+      const isPause = next && (next.startTime - curr.endTime >= 0.35);
+      const isEndOfPunctuation = /[.!?]$/.test(curr.text);
       const isLastWord = i === words.length - 1;
 
-      if ((isPause || isLongEnough || isEndOfPunctuation || isLastWord) && currentLineWords.length > 0) {
+      if ((isExplicitNewline || isPause || isEndOfPunctuation || isLastWord) && currentLineWords.length > 0) {
         const lineEndTime = curr.endTime;
         const lineText = cleanLyricsText(currentLineWords.map(w => w.word).join(' '));
 
@@ -474,6 +569,7 @@ export class SunoImporterService {
 
     return rawLines;
   }
+
 
   /**
    * Suno promptundaki yapı etiketlerini ([Verse 1], [Chorus], [Guitar Solo], (Fast tempo), vb.) temizler.

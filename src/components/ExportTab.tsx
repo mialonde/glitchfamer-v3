@@ -1,6 +1,7 @@
 import React from "react";
-import { Video, Download, Loader2 } from "lucide-react";
+import { Video, Download, Loader2, RotateCcw, AlertTriangle } from "lucide-react";
 import { VisualizerSettings } from "../types";
+import { Button, Badge, Card } from "./ui";
 import { cn } from "../lib/utils";
 
 interface ExportTabProps {
@@ -54,181 +55,196 @@ export const ExportTab: React.FC<ExportTabProps> = ({
     <div className="space-y-6 animate-in fade-in-50 duration-150">
       
       {/* Motor Seçimi (SSR vs CSR) */}
-      <div className="bg-panel border border-border-subtle p-4 rounded-sm space-y-3">
-        <span className="text-[10px] font-sans font-bold text-content-secondary uppercase tracking-widest block">
-          RENDER MOTORU SEÇİMİ
-        </span>
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-content-secondary uppercase tracking-wider">
+            RENDER MOTORU SEÇİMİ
+          </span>
+          <Badge variant="outline" className="text-[9px]">
+            H.264 / WEBM ÇIKTI
+          </Badge>
+        </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => onSetRenderEngine('server')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSetRenderEngine('server'); }}
             className={cn(
-              "p-3 text-left border rounded-sm transition-all flex flex-col gap-1 cursor-pointer",
+              "p-3 rounded-lg border transition-all flex flex-col gap-1.5 cursor-pointer text-left",
               renderEngine === 'server'
-                ? "border-accent bg-surface/80 shadow-[0_0_15px_rgba(255,215,0,0.15)]"
-                : "border-border-subtle bg-panel text-content-tertiary hover:border-border-strong"
+                ? "border-accent bg-surface shadow-elevation-2"
+                : "border-border-subtle bg-surface/40 text-content-tertiary hover:border-border-strong"
             )}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-sans font-bold uppercase text-accent">SUNUCU (SSR)</span>
-              <span className="text-[7.5px] bg-accent/20 text-accent px-1 py-0.2 font-sans font-bold">ÖNERİLEN</span>
+              <span className="text-xs font-bold uppercase text-accent">SUNUCU (SSR)</span>
+              <Badge variant="accent" className="text-[8px]">ÖNERİLEN</Badge>
             </div>
-            <p className="text-[8.5px] text-content-secondary font-sans leading-relaxed">
+            <p className="text-[11px] text-content-secondary leading-relaxed">
               FFmpeg 60 FPS MP4 kodlama. Kristal netliğinde çıktı verir.
             </p>
-          </button>
+          </div>
 
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => onSetRenderEngine('client')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSetRenderEngine('client'); }}
             className={cn(
-              "p-3 text-left border rounded-sm transition-all flex flex-col gap-1 cursor-pointer",
+              "p-3 rounded-lg border transition-all flex flex-col gap-1.5 cursor-pointer text-left",
               renderEngine === 'client'
-                ? "border-accent bg-surface/80 shadow-[0_0_15px_rgba(255,215,0,0.15)]"
-                : "border-border-subtle bg-panel text-content-tertiary hover:border-border-strong"
+                ? "border-accent bg-surface shadow-elevation-2"
+                : "border-border-subtle bg-surface/40 text-content-tertiary hover:border-border-strong"
             )}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-sans font-bold uppercase text-content-secondary">İSTEMCİ (CSR)</span>
-              <span className="text-[7.5px] bg-hover text-content-secondary px-1 py-0.2 font-sans">TARAYICI</span>
+              <span className="text-xs font-bold uppercase text-content-secondary">İSTEMCİ (CSR)</span>
+              <Badge variant="secondary" className="text-[8px]">TARAYICI</Badge>
             </div>
-            <p className="text-[8.5px] text-content-secondary font-sans leading-relaxed">
+            <p className="text-[11px] text-content-secondary leading-relaxed">
               MediaRecorder WebM kaydı. Hızlı önizleme ve yerel indirme.
             </p>
-          </button>
+          </div>
         </div>
 
         {/* Çözünürlük */}
         {renderEngine === 'server' && (
-          <div className="pt-2 flex items-center justify-between text-[9px] font-sans text-content-secondary border-t border-border-subtle">
-            <span>ÇÖZÜNÜRLÜK:</span>
+          <div className="pt-3 flex items-center justify-between text-xs text-content-secondary border-t border-border-subtle">
+            <span className="font-mono text-[10px] uppercase">ÇÖZÜNÜRLÜK:</span>
             <div className="flex gap-2">
-              <button
-                type="button"
+              <Button
+                variant={serverQuality === '1080p' ? 'accent' : 'outline'}
+                size="xs"
                 onClick={() => onSetServerQuality('1080p')}
-                className={cn(
-                  "px-2 py-0.5 border text-[8.5px] font-sans font-bold uppercase cursor-pointer",
-                  serverQuality === '1080p' ? "border-accent bg-accent text-black" : "border-border-strong text-content-tertiary"
-                )}
+                className="font-mono text-[9px]"
               >
                 1080P FULL HD
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant={serverQuality === '720p' ? 'accent' : 'outline'}
+                size="xs"
                 onClick={() => onSetServerQuality('720p')}
-                className={cn(
-                  "px-2 py-0.5 border text-[8.5px] font-sans font-bold uppercase cursor-pointer",
-                  serverQuality === '720p' ? "border-accent bg-accent text-black" : "border-border-strong text-content-tertiary"
-                )}
+                className="font-mono text-[9px]"
               >
                 720P HIZLI
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* SSR Render Alanı */}
       {renderEngine === 'server' && (
         <div className="space-y-3">
           {isServerRendering ? (
-            <div className="p-5 bg-panel border border-accent space-y-3 shadow-[0_0_30px_rgba(255,215,0,0.15)] rounded-sm">
+            <Card className="p-5 border-accent space-y-3 shadow-elevation-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-sans font-bold text-accent uppercase flex items-center gap-2">
+                <span className="text-xs font-bold text-accent uppercase flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
                   SUNUCUDA RENDER ALINIYOR...
                 </span>
-                <span className="text-xs font-sans font-bold text-accent">
+                <span className="text-xs font-mono font-bold text-accent">
                   %{serverProgress}
                 </span>
               </div>
 
               {/* İlerleme Çubuğu */}
-              <div className="w-full h-2.5 bg-surface border border-border-strong overflow-hidden rounded-full">
+              <div className="w-full h-2 bg-surface border border-border-strong overflow-hidden rounded-full">
                 <div 
-                  className="h-full bg-gradient-to-r from-[#FFD700] to-yellow-200 transition-all duration-300 shadow-[0_0_10px_#FFD700]"
+                  className="h-full bg-accent transition-all duration-300 shadow-[0_0_10px_rgba(255,215,0,0.5)]"
                   style={{ width: `${serverProgress}%` }}
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[9px] font-sans text-content-secondary">
+              <div className="flex items-center justify-between text-[10px] font-mono text-content-secondary">
                 <span className="truncate pr-2">{serverStage}</span>
-                <button 
-                  type="button"
+                <Button 
+                  variant="destructive"
+                  size="xs"
                   onClick={onCancelServerRender}
-                  className="text-red-400 hover:text-red-300 font-bold uppercase shrink-0 cursor-pointer underline"
+                  className="text-[9px]"
                 >
                   İPTAL
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           ) : serverVideoUrl ? (
             <div className="space-y-2">
               <a 
                 href={serverVideoUrl}
                 download={`${settings.trackTitle || 'vidframer_render'}.mp4`}
-                className="block text-center w-full bg-accent hover:bg-white text-black py-4 text-xs font-black uppercase tracking-[0.25em] transition-all shadow-[0_0_25px_rgba(255,215,0,0.3)] rounded-sm flex items-center justify-center gap-2"
+                className="block text-center w-full bg-accent hover:bg-accent/90 text-accent-foreground py-3.5 text-xs font-bold uppercase tracking-widest transition-all shadow-elevation-3 rounded-lg flex items-center justify-center gap-2"
               >
                 <Download size={16} /> 60 FPS MP4 VİDEOYU İNDİR
               </a>
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   onResetServerVideoUrl();
                   onStartServerRender();
                 }}
-                className="w-full bg-surface hover:bg-hover text-content-secondary py-2 text-[9px] font-sans uppercase tracking-wider border border-border-strong rounded-sm cursor-pointer"
+                className="w-full text-xs gap-1.5"
               >
+                <RotateCcw size={13} />
                 YENİDEN RENDER ET
-              </button>
+              </Button>
             </div>
           ) : (
-            <button 
-              type="button"
+            <Button 
+              variant="accent"
+              size="lg"
               onClick={onStartServerRender}
               disabled={!audioUrl || isServerRendering}
-              className="w-full bg-accent text-black py-4 text-xs font-black uppercase tracking-[0.25em] hover:bg-white transition-all disabled:opacity-25 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(255,215,0,0.2)] rounded-sm"
+              className="w-full text-xs font-bold uppercase tracking-widest gap-2 shadow-elevation-2 py-4"
             >
               <Video size={16} /> 60 FPS MP4 RENDER BAŞLAT (FFMPEG)
-            </button>
+            </Button>
           )}
 
           {serverError && (
-            <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 text-xs font-sans rounded-sm space-y-2">
+            <Card className="p-4 bg-destructive/10 border-destructive/40 text-destructive-foreground text-xs space-y-3">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <span className="font-bold block text-red-200">Sunucu Render Hatası:</span>
-                  <span className="text-[10px] text-red-300/90">{serverError}</span>
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-destructive">Sunucu Render Hatası:</span>
+                    <span className="text-[11px] text-content-secondary mt-0.5">{serverError}</span>
+                  </div>
                 </div>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={onClearServerError}
-                  className="text-red-400 hover:text-white text-[10px] cursor-pointer"
+                  className="h-6 w-6 p-0 text-content-tertiary hover:text-content-primary"
                 >
                   ✕
-                </button>
+                </Button>
               </div>
-              <div className="flex items-center gap-2 pt-1 border-t border-red-900/50">
-                <button
-                  type="button"
+              <div className="flex items-center gap-2 pt-2 border-t border-destructive/20">
+                <Button
+                  variant="destructive"
+                  size="xs"
                   onClick={onStartServerRender}
-                  className="px-2.5 py-1 bg-red-900/40 hover:bg-red-900/80 text-red-200 text-[8.5px] uppercase font-bold rounded-sm border border-red-700 cursor-pointer"
+                  className="text-[9px] uppercase font-bold"
                 >
                   ⚡ Yeniden Dene
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
                   onClick={() => {
                     onSetRenderEngine('client');
                     onClearServerError();
                   }}
-                  className="px-2.5 py-1 bg-accent/20 hover:bg-accent/40 text-accent text-[8.5px] uppercase font-bold rounded-sm border border-accent/40 cursor-pointer"
+                  className="text-[9px] uppercase font-bold"
                 >
                   Tarayıcı Motoruna Geç (CSR)
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           )}
         </div>
       )}
@@ -237,42 +253,46 @@ export const ExportTab: React.FC<ExportTabProps> = ({
       {renderEngine === 'client' && (
         <div className="space-y-3">
           {!videoResultUrl ? (
-            <button 
-              type="button"
+            <Button 
+              variant="outline"
+              size="lg"
               onClick={onStartClientRender}
               disabled={!audioUrl || isRecording}
-              className="w-full bg-hover text-content-primary hover:bg-hover/80 py-4 text-xs font-sans font-bold uppercase tracking-wider transition-all disabled:opacity-20 flex items-center justify-center gap-2 cursor-pointer border border-border-strong rounded-sm"
+              className="w-full text-xs font-bold uppercase tracking-wider gap-2 py-4"
             >
               <Video size={16} /> {isRecording ? 'İSTEMCİDE KAYDEDİLİYOR...' : 'WEBM KAYDI BAŞLAT'}
-            </button>
+            </Button>
           ) : (
             <div className="space-y-2">
-              <button
-                type="button"
+              <Button
+                variant="accent"
+                size="lg"
                 onClick={onConvertWebMtoMp4}
                 disabled={isConvertingMp4}
-                className="w-full bg-accent hover:bg-white text-black py-4 text-xs font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(255,215,0,0.3)] rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="w-full text-xs font-bold uppercase tracking-widest gap-2 shadow-elevation-2 py-4"
               >
                 {isConvertingMp4 ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} 
                 {isConvertingMp4 ? "MP4'E ÇEVRİLİYOR..." : "MP4 OLARAK İNDİR (HIZLI)"}
-              </button>
+              </Button>
               <a 
                 href={videoResultUrl} 
                 download={`${settings.trackTitle || 'vidframer_render'}.webm`}
-                className="block text-center w-full bg-panel hover:bg-surface text-content-secondary py-3 text-[10px] font-bold uppercase tracking-widest transition-all border border-border-strong rounded-sm flex items-center justify-center gap-2"
+                className="block text-center w-full bg-surface hover:bg-surface-hover text-content-secondary py-3 text-xs font-bold uppercase tracking-wider transition-all border border-border-strong rounded-lg flex items-center justify-center gap-2"
               >
-                <Download size={12} /> WEBM (ORİJİNAL) İNDİR
+                <Download size={14} /> WEBM (ORİJİNAL) İNDİR
               </a>
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   onResetClientVideoUrl();
                   onStartClientRender();
                 }}
-                className="w-full bg-surface hover:bg-hover text-content-secondary py-2 text-[9px] font-sans uppercase tracking-wider border border-border-strong rounded-sm cursor-pointer"
+                className="w-full text-xs gap-1.5"
               >
+                <RotateCcw size={13} />
                 YENİDEN KAYDET
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -281,3 +301,4 @@ export const ExportTab: React.FC<ExportTabProps> = ({
     </div>
   );
 };
+

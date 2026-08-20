@@ -10,17 +10,20 @@ export class KineticTypoVisualizer implements IVisualizer {
     
     let displayText = "";
 
+    const syncOffset = settings.lyricsSyncOffset || 0;
+    const currentTime = audio.time + syncOffset;
+
     // 1. Sadece Magic Sync (Yapay Zeka) zamanlamalarını kullan
     if (settings.syncedLyrics && settings.syncedLyrics.length > 0) {
         // O anki saniyeye denk gelen satırı bul
         const activeLine = settings.syncedLyrics.find(
-            line => audio.time >= line.startTime && audio.time <= line.endTime
+            line => currentTime >= line.startTime && currentTime <= line.endTime
         );
         
         if (activeLine) {
             // Satırın içindeki o anki KELİMEYİ bul (Kelime kelime patlaması için)
             const activeWord = activeLine.words?.find(
-                w => audio.time >= w.startTime && audio.time <= w.endTime
+                w => currentTime >= w.startTime && currentTime <= w.endTime
             );
             // Eğer tam o saniyede kelime varsa onu, yoksa satırın tamamını bas
             displayText = activeWord ? activeWord.word : activeLine.text;

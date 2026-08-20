@@ -22,13 +22,16 @@ export class KineticTypoGlitchVisualizer implements IVisualizer {
     let mainText = '';
     let subText = '';
 
+    const syncOffset = settings.lyricsSyncOffset || 0;
+    const currentTime = audio.time + syncOffset;
+
     if (settings.syncedLyrics && settings.syncedLyrics.length > 0) {
       const activeLine = settings.syncedLyrics.find(
-        line => audio.time >= line.startTime && audio.time <= line.endTime
+        line => currentTime >= line.startTime && currentTime <= line.endTime
       );
       if (activeLine) {
         const activeWord = activeLine.words?.find(
-          w => audio.time >= w.startTime && audio.time <= w.endTime
+          w => currentTime >= w.startTime && currentTime <= w.endTime
         );
         mainText = activeWord ? activeWord.word : activeLine.text;
         subText = activeWord ? activeLine.text : (metadata?.artist || settings.artistName || '');

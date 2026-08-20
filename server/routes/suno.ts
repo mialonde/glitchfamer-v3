@@ -1,43 +1,7 @@
 import { Router } from "express";
+import { isUrlSafe, fetchWithTimeout } from "../utils/security";
 
 const router = Router();
-
-function isUrlSafe(urlStr: string): boolean {
-  try {
-    if (urlStr.startsWith("/") || urlStr.startsWith("./")) {
-      return true;
-    }
-    const parsed = new URL(urlStr);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return false;
-    }
-    const host = parsed.hostname.toLowerCase();
-    
-    // Strict Whitelist: Only allow specific known domains (Suno CDNs, Google Storage, generic safe CDNs)
-    // Removed general "run.app" suffix and restricted localhost/127.0.0.1 to development environments only.
-    const allowedDomains = [
-      "suno.com", "suno.ai",
-      "cdn1.suno.ai", "cdn2.suno.ai", "cdn.suno.ai",
-      "storage.googleapis.com", 
-      "firebasestorage.googleapis.com"
-    ];
-
-    if (process.env.NODE_ENV !== "production") {
-      allowedDomains.push("localhost", "127.0.0.1");
-    }
-
-    if (
-      allowedDomains.includes(host) ||
-      allowedDomains.some(d => host.endsWith("." + d))
-    ) {
-      return true;
-    }
-    
-    return false;
-  } catch (_) {
-    return false;
-  }
-}
 
 // 1. Suno Şarkı Bilgisi & Metadata Analizi (Multi-Source Fetcher & Aligned Lyrics Extractor)
 router.post("/suno/inspect", async (req, res) => {
@@ -79,13 +43,13 @@ router.post("/suno/inspect", async (req, res) => {
         return res.status(400).json({ error: "Güvensiz veya geçersiz Suno URL'i." });
       }
       try {
-        const pageRes = await fetch(input, {
+        const pageRes = await fetchWithTimeout(input, {
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
           },
           redirect: "follow"
-        });
+        }, 8000);
 
         const finalUrl = pageRes.url || input;
         const finalUuidMatch = finalUrl.match(/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/);
@@ -137,12 +101,12 @@ router.post("/suno/inspect", async (req, res) => {
 
       for (const endpoint of studioEndpoints) {
         try {
-          const apiRes = await fetch(endpoint, {
+          const apiRes = await fetchWithTimeout(endpoint, {
             headers: {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
               "Accept": "application/json"
             }
-          });
+          }, 8000);
 
           if (apiRes.ok) {
             const json = await apiRes.json();
@@ -171,12 +135,12 @@ router.post("/suno/inspect", async (req, res) => {
 
         for (const aEndpoint of alignedEndpoints) {
           try {
-            const aRes = await fetch(aEndpoint, {
+            const aRes = await fetchWithTimeout(aEndpoint, {
               headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "application/json"
               }
-            });
+            }, 8000);
             if (aRes.ok) {
               const aJson = await aRes.json();
               if (Array.isArray(aJson) && aJson.length > 0) {
@@ -240,13 +204,13 @@ router.get("/suno/proxy-audio", async (req, res) => {
       return res.status(400).send("Geçerli ve güvenli bir audio url gereklidir.");
     }
 
-    // Suno CDN'den audio stream çek
-    const audioRes = await fetch(targetUrl, {
+    // Suno CDN'den audio stream çek (15s timeout)
+    const audioRes = await fetchWithTimeout(targetUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Range": req.headers.range || "bytes=0-"
       }
-    });
+    }, 15000);
 
     if (!audioRes.ok && audioRes.status !== 206) {
       return res.status(audioRes.status).send(`Suno Audio CDN hatası: ${audioRes.statusText}`);
@@ -298,12 +262,12 @@ router.get("/suno/aligned-lyrics/:trackId", async (req, res) => {
 
     for (const ep of alignedEndpoints) {
       try {
-        const epRes = await fetch(ep, {
+        const epRes = await fetchWithTimeout(ep, {
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "application/json"
           }
-        });
+        }, 8000);
         if (epRes.ok) {
           const data = await epRes.json();
           if (Array.isArray(data) && data.length > 0) {

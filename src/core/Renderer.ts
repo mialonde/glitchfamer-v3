@@ -2779,14 +2779,17 @@ export class StudioRenderer {
   private drawLyricsLayer(ctx: CanvasRenderingContext2D, width: number, height: number, audio: AudioEvents, settings: VisualizerSettings) {
     if (!settings.syncedLyrics || settings.syncedLyrics.length === 0) return;
 
+    const syncOffset = settings.lyricsSyncOffset || 0;
+    const effectiveTime = audio.time + syncOffset;
+
     let activeIdx = -1;
     let nextIdx = -1;
     
     activeIdx = settings.syncedLyrics.findIndex(
-      line => audio.time >= line.startTime && audio.time <= line.endTime
+      line => effectiveTime >= line.startTime && effectiveTime <= line.endTime
     );
 
-    nextIdx = settings.syncedLyrics.findIndex(l => l.startTime > audio.time);
+    nextIdx = settings.syncedLyrics.findIndex(l => l.startTime > effectiveTime);
     
     if (activeIdx === -1) {
       if (nextIdx !== -1) {
@@ -2800,8 +2803,8 @@ export class StudioRenderer {
     const style: LyricsStyle = settings.lyricsStyle || 'BETTER_FLOW';
 
     // In non-scrolling modes, if no line is currently actively sung, check for vocal gap countdown dots
-    const isActivelySung = activeIdx !== -1 && activeLine && audio.time >= activeLine.startTime && audio.time <= activeLine.endTime;
-    const isVocalGap = !isActivelySung && nextIdx !== -1 && settings.syncedLyrics[nextIdx] && (settings.syncedLyrics[nextIdx].startTime - audio.time <= 4.0) && (settings.syncedLyrics[nextIdx].startTime - audio.time >= 0.1);
+    const isActivelySung = activeIdx !== -1 && activeLine && effectiveTime >= activeLine.startTime && effectiveTime <= activeLine.endTime;
+    const isVocalGap = !isActivelySung && nextIdx !== -1 && settings.syncedLyrics[nextIdx] && (settings.syncedLyrics[nextIdx].startTime - effectiveTime <= 4.0) && (settings.syncedLyrics[nextIdx].startTime - effectiveTime >= 0.1);
 
     if (!activeLine && !isVocalGap && style !== 'APPLE_SCROLL' && style !== 'BETTER_FLOW') return;
 
@@ -2925,9 +2928,9 @@ export class StudioRenderer {
             const wText = w.word + " ";
             const wWidth = ctx.measureText(wText).width;
             const wDur = Math.max(0.1, w.endTime - w.startTime);
-            const wProgress = Math.max(0, Math.min(1, (audio.time - w.startTime) / wDur));
-            const isWordActive = audio.time >= w.startTime && audio.time <= w.endTime;
-            const isWordPast = audio.time > w.endTime;
+            const wProgress = Math.max(0, Math.min(1, (effectiveTime - w.startTime) / wDur));
+            const isWordActive = effectiveTime >= w.startTime && effectiveTime <= w.endTime;
+            const isWordPast = effectiveTime > w.endTime;
             const isLongNote = wDur >= 0.75 && isWordActive;
 
             return {

@@ -38,6 +38,32 @@ Bu dosya, GlitchFramer 2.0 (VidFramer) projesi üzerinde çalışan tüm yapay z
 ## 🔄 3. Yapay Zeka Ajanı Çalışma Döngüsü (Agent Workflow)
 
 1. **Başlangıç**: `MEMORY.md` ve `AGENTS.md` dosyalarını inceleyerek güncel durumu ve mimariyi kavra.
-2. **Geliştirme**: İstenen özellikleri tek odaklı, modüler ve temiz bir şekilde uygula.
+2. **Geliştirme**: İstenen özellikleri tek odaklı, modüler, tip güvenli ve temiz bir şekilde uygula.
 3. **Doğrulama**: `npx tsc --noEmit` ve `npm run build` ile hatasız derlemeyi onayla.
 4. **Güncelleme**: `MEMORY.md` üzerindeki İlerleme Logu'na yeni oturumu, değişiklikleri ve derleme sonucunu ekle.
+
+---
+
+## 🎨 4. shadcn & Modern UI Kodlama Standartları (@shadcn-coding-skill)
+
+Tüm geliştirmelerde `@shadcn-coding-skill` prensipleri uygulanır:
+
+1. **Küçük ve Birleştirilebilir (Composable) Bileşenler**:
+   - Derin soyutlama katmanları yerine küçük, odaklı, tek sorumluluğa sahip ve yeniden kullanılabilir UI parçaları oluşturulur.
+   - `cn()` (`clsx` + `tailwind-merge`) fonksiyonu ile dinamik Tailwind sınıf yönetimi sağlanır.
+
+2. **Tip Güvenliği ve Temiz Arayüzler (TypeScript-First)**:
+   - Tüm bileşenler açık (`explicit`) TypeScript arayüzleri (`interface`/`type`) ile tanımlanır.
+   - `any` kullanımından kaçınılır, katı tip denetimi (`strict`) ve opsiyonel değerler için güvenli varsayılanlar (`?? default`) kullanılır.
+
+3. **Yalın, Erişilebilir ve Rafine Estetik (Restrained & Accessible Taste)**:
+   - Aşırı süslü veya karmaşık UI klişelerinden kaçınılır.
+   - Net kontrast, tutarlı boşluk (spacing rhythm), semantik etiketler ve erişilebilir odak/klavye durumları uygulanır.
+
+4. **Temiz İçe Aktarmalar ve Gürültüsüz Diff (Clean Imports & Low-Noise Diffs)**:
+   - İçe aktarmalar düzenli gruplanır (harici kütüphaneler -> dahili bileşenler/servisler -> tipler/yardımcılar).
+   - Yalnızca hedeflenen kısımlar güncellenir, gereksiz yeniden biçimlendirmelerden kaçınılır.
+
+5. **Açık ve Uygulanabilir Dokümantasyon & Planlama**:
+   - Değişiklikler ve planlar doğrudan yürütülebilir, net ve doğrulanabilir adımlarla `MEMORY.md` ve ilgili dokümanlara yansıtılır.
+

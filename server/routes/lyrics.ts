@@ -1,6 +1,7 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { GoogleGenAI } from "@google/genai";
 import rateLimit from "express-rate-limit";
+import { dailyQuotaManager } from "../utils/security";
 
 const router = Router();
 
@@ -25,8 +26,27 @@ const lyricsLimiter = rateLimit({
   message: { error: "Çok fazla AI şarkı sözü analizi isteği gönderildi. Lütfen 15 dakika sonra tekrar deneyin." }
 });
 
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket?.remoteAddress || req.ip || "127.0.0.1";
+}
+
 router.post("/sync-lyrics", lyricsLimiter, async (req, res) => {
   try {
+    const clientIp = getClientIp(req);
+    const quota = dailyQuotaManager.checkAndIncrementLyrics(clientIp);
+    if (!quota.allowed) {
+      res.setHeader("X-Daily-Quota-Remaining", "0");
+      return res.status(429).json({ 
+        error: `Günlük AI şarkı sözü senkronizasyonu kotanıza (${quota.totalLimit} işlem/gün) ulaştınız. Lütfen yarın tekrar deneyin.`,
+        remaining: 0 
+      });
+    }
+    res.setHeader("X-Daily-Quota-Remaining", quota.remaining.toString());
+
     const { audioBase64, mimeType } = req.body;
     if (!audioBase64 || !mimeType) {
       return res.status(400).json({ error: "audioBase64 ve mimeType parametreleri zorunludur." });

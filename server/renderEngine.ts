@@ -6,6 +6,14 @@ import crypto from 'crypto';
 import { VisualizerSettings, AudioEvents } from '../src/types';
 import { StudioRenderer } from '../src/core/Renderer';
 import { OfflineAudioProcessor } from '../src/core/AudioAnalysisEngine';
+import { 
+  isUrlSafe, 
+  isSafeBgImageUrl, 
+  clampDuration, 
+  clampFps, 
+  fetchWithTimeout, 
+  HARD_CAPS 
+} from './utils/security';
 
 export interface RenderJob {
   id: string;
@@ -53,6 +61,34 @@ if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
+// Rekürsif eski dosya ve dizin temizleyici (Phase 2 #7)
+function cleanDirectoryRecursively(dirPath: string, maxAgeMs: number, now: number): void {
+  if (!fs.existsSync(dirPath)) return;
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        cleanDirectoryRecursively(fullPath, maxAgeMs, now);
+        // Eğer alt klasör boş kaldıysa ve eskiyse sil
+        const remaining = fs.readdirSync(fullPath);
+        if (remaining.length === 0) {
+          const stats = fs.statSync(fullPath);
+          if (now - stats.mtimeMs > maxAgeMs) {
+            fs.rmdirSync(fullPath);
+          }
+        }
+      } else if (entry.isFile()) {
+        const stats = fs.statSync(fullPath);
+        if (now - stats.mtimeMs > maxAgeMs) {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    } catch (_) {}
+  }
+}
+
 // Otomatik 15 dakikalık disk ve temp dosya temizleme rutini (20 dakikadan eski dosyalar)
 setInterval(() => {
   try {
@@ -66,19 +102,8 @@ setInterval(() => {
         jobs.delete(id);
       }
     }
-    // 2. Temp klasöründeki yetim / geçici dosyaları süpür
-    if (fs.existsSync(TEMP_DIR)) {
-      const files = fs.readdirSync(TEMP_DIR);
-      for (const file of files) {
-        const fullPath = path.join(TEMP_DIR, file);
-        try {
-          const stats = fs.statSync(fullPath);
-          if (now - stats.mtimeMs > 20 * 60 * 1000) {
-            fs.unlinkSync(fullPath);
-          }
-        } catch (_) {}
-      }
-    }
+    // 2. Temp klasöründeki yetim dosyaları ve chunked_uploads oturumlarını rekürsif temizle
+    cleanDirectoryRecursively(TEMP_DIR, 20 * 60 * 1000, now);
   } catch (err) {
     console.warn('Temp disk cleanup warning:', err);
   }
@@ -115,7 +140,8 @@ export function cancelRenderJob(id: string): boolean {
 export async function createRenderJob(payload: StartRenderPayload): Promise<{ jobId: string; ownerToken: string }> {
   const jobId = `render_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const ownerToken = crypto.randomBytes(24).toString('hex');
-  const fps = payload.fps || 30; // 30 FPS yüksek stabilite ve akıcılık
+  const fps = clampFps(payload.fps || 30);
+  const duration = clampDuration(payload.duration || 30);
   const settings = payload.settings;
 
   const job: RenderJob = {
@@ -132,7 +158,7 @@ export async function createRenderJob(payload: StartRenderPayload): Promise<{ jo
     videoUrl: null,
     error: null,
     createdAt: Date.now(),
-    duration: payload.duration || 30,
+    duration,
     fps,
     trackTitle: settings.trackTitle || 'vidframer_export'
   };
@@ -207,8 +233,11 @@ async function processRenderJob(jobId: string, payload: StartRenderPayload) {
       // Multer tarafından yüklenen dosyayı tempAudioPath'e kopyala / taşı
       fs.copyFileSync(payload.audioFilePath, tempAudioPath);
     } else if (payload.audioRemoteUrl && payload.audioRemoteUrl.startsWith('http')) {
-      // Uzak sunucudan doğrudan indir
-      const remoteRes = await fetch(payload.audioRemoteUrl);
+      if (!isUrlSafe(payload.audioRemoteUrl)) {
+        throw new Error('Güvensiz ses dosyası URL kaynağı.');
+      }
+      // Uzak sunucudan timeout korumalı indir
+      const remoteRes = await fetchWithTimeout(payload.audioRemoteUrl, {}, 15000);
       if (!remoteRes.ok) {
         throw new Error(`Uzak ses dosyası indirilemedi: HTTP ${remoteRes.status}`);
       }
@@ -239,22 +268,23 @@ async function processRenderJob(jobId: string, payload: StartRenderPayload) {
     }
 
     // 2. Ses süresini ffprobe ile tam tespit et
-    let audioDuration = payload.duration || 30;
+    let audioDuration = clampDuration(payload.duration || 30);
     try {
       const probeOutput = execSync(
         `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${tempAudioPath}"`
       ).toString().trim();
       const parsedDur = parseFloat(probeOutput);
       if (!isNaN(parsedDur) && parsedDur > 0) {
-        audioDuration = parsedDur;
+        audioDuration = clampDuration(parsedDur);
       }
     } catch (e) {
       console.warn('ffprobe duration detection warning, fallback to requested duration:', e);
     }
 
     job.duration = audioDuration;
-    const fps = payload.fps || 30;
-    const totalFrames = Math.max(1, Math.floor(audioDuration * fps));
+    const fps = clampFps(payload.fps || 30);
+    const calculatedFrames = Math.floor(audioDuration * fps);
+    const totalFrames = Math.min(HARD_CAPS.MAX_TOTAL_FRAMES, Math.max(1, calculatedFrames));
     job.totalFrames = totalFrames;
 
     // 3. FFmpeg ile 44.1kHz 16-bit Mono Raw PCM çıkar
@@ -334,7 +364,7 @@ async function processRenderJob(jobId: string, payload: StartRenderPayload) {
       }
     }
 
-    // Arka Plan Görseli (Static Wallpaper) varsa yükle
+    // Arka Plan Görseli (Static Wallpaper) varsa whitelist ve güvenli yükle
     if (payload.bgImageFilePath && fs.existsSync(payload.bgImageFilePath)) {
       try {
         const bgImg = await loadImage(payload.bgImageFilePath);
@@ -350,11 +380,15 @@ async function processRenderJob(jobId: string, payload: StartRenderPayload) {
         console.warn('Background image load warning:', e);
       }
     } else if (payload.settings?.bgImageUrl) {
-      try {
-        const bgImg = await loadImage(payload.settings.bgImageUrl);
-        renderer.setBgImage(bgImg as any);
-      } catch (e) {
-        console.warn('Settings bgImageUrl load warning:', e);
+      if (isSafeBgImageUrl(payload.settings.bgImageUrl)) {
+        try {
+          const bgImg = await loadImage(payload.settings.bgImageUrl);
+          renderer.setBgImage(bgImg as any);
+        } catch (e) {
+          console.warn('Settings bgImageUrl load warning:', e);
+        }
+      } else {
+        console.warn('Settings bgImageUrl rejected by security whitelist:', payload.settings.bgImageUrl);
       }
     }
 
@@ -479,3 +513,4 @@ function cleanupTempFiles(filePaths: string[]) {
     } catch (_) {}
   });
 }
+

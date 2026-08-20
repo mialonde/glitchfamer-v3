@@ -259,6 +259,7 @@ export interface VisualizerSettings {
   lyricsWordSweep?: boolean;         // Kelime içi yumuşak degrade dolgu (BetterLyrics)
   lyricsTranslationEnabled?: boolean;// Çeviri satırı gösterimi
   lyricsRomanizationEnabled?: boolean;// Romaji / Latinizasyon satırı gösterimi
+  lyricsSyncOffset?: number;         // Senkronizasyon kaydırma / kalibrasyon ofseti (saniye: -5.0s ile +5.0s)
   
   // 3D Avatar Performans Katmanı Konfigürasyonu (6-Layer Architecture)
   performanceLayers?: Partial<PerformanceLayerConfig>;
@@ -393,9 +394,6 @@ export interface VisualizerPresetProfile {
   settings: Partial<VisualizerSettings>;
 }
 
-// ==========================================
-// CMS & ADMIN TYPES
-// ==========================================
 export interface CMSPage {
   id: string;
   title: string;
@@ -403,6 +401,7 @@ export interface CMSPage {
   content: string;
   createdAt: number;
 }
+
 
 export interface CMSLayout {
   headerTitle: string;
@@ -650,5 +649,140 @@ export interface PostRenderFeedbackRecord {
   timestamp: number;
   userEmail?: string;
 }
+
+// -------------------------------------------------------------
+// CMS Configuration Models (Full-Stack Dynamic CMS Panel)
+// -------------------------------------------------------------
+
+export interface CMSHeaderLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
+export interface CMSFooterLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
+export interface CMSAppTheme {
+  primaryColor: string;    // e.g. #FFD700
+  secondaryColor: string;  // e.g. #FFFFFF
+  accentColor: string;     // e.g. #0057FF
+  bgDark: string;          // e.g. #060608
+}
+
+export interface CMSGlobalSettings {
+  appName: string;
+  appSubtitle: string;
+  tabTitle: string;
+  metaDescription: string;
+  logoUrl: string;
+  logoType: 'text' | 'image' | 'icon';
+  headerTitle: string;
+  headerSubtitle: string;
+  headerLinks: CMSHeaderLink[];
+  footerText: string;
+  footerLinks: CMSFooterLink[];
+  theme: CMSAppTheme;
+}
+
+export interface CMSApiKeysConfig {
+  hasGeminiKey: boolean;
+  maskedGeminiKey: string;
+  hasSunoKey: boolean;
+  maskedSunoKey: string;
+  customWebhookUrl: string;
+  geminiModel: string;
+}
+
+export interface CMSVisualizerConfig {
+  disabledVisualizers: string[]; // List of VisualizerMode IDs that are deactivated
+  customLabels: Record<string, string>; // Custom rename mapping
+}
+
+export interface CMSPageItem {
+  id: string;
+  title: string;
+  slug: string;
+  category: 'SAYFA' | 'DUYURU' | 'BLOG' | 'YASAL' | 'SSS';
+  content: string; // Markdown or HTML
+  coverImageUrl?: string;
+  status: 'YAYINDA' | 'TASLAK';
+  views: number;
+  author: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CMSMediaItem {
+  id: string;
+  name: string;
+  type: 'IMAGE' | 'VIDEO' | 'AUDIO' | '3D_AVATAR' | 'LOGO' | 'WATERMARK';
+  url: string;
+  sizeBytes: number;
+  mimeType: string;
+  tags: string[];
+  uploadedAt: number;
+}
+
+export interface CMSSeoAnalytics {
+  metaTitleTemplate: string;
+  defaultOgImage: string;
+  twitterHandle: string;
+  googleAnalyticsId: string;
+  customHeadScripts: string;
+  customBodyScripts: string;
+  robotsTxtContent: string;
+  sitemapEnabled: boolean;
+}
+
+export interface CMSFormSubmission {
+  id: string;
+  senderName: string;
+  senderEmail: string;
+  subject: string;
+  category: 'İLETİŞİM' | 'GÖRSELLEŞTİRİCİ TALEBİ' | 'HATA BİLDİRİMİ' | 'GÖRÜŞ';
+  message: string;
+  status: 'YENİ' | 'İNCELENİYOR' | 'YANITLANDI' | 'ARŞİV';
+  priority: 'DÜŞÜK' | 'ORTA' | 'YÜKSEK';
+  createdAt: number;
+}
+
+export interface CMSAdminUser {
+  id: string;
+  username: string;
+  email: string;
+  role: 'SÜPER ADMİN' | 'EDITÖR' | 'MODERATÖR';
+  lastLoginAt: number;
+  status: 'AKTİF' | 'KİLİTLİ';
+}
+
+export interface CMSAuditLog {
+  id: string;
+  timestamp: number;
+  action: string;
+  user: string;
+  details: string;
+  ip?: string;
+}
+
+export interface CMSFullConfig {
+  globalSettings: CMSGlobalSettings;
+  apiKeys: CMSApiKeysConfig;
+  visualizerConfig: CMSVisualizerConfig;
+  customPresets: VisualizerPresetProfile[];
+  pages?: CMSPageItem[];
+  mediaAssets?: CMSMediaItem[];
+  seoAnalytics?: CMSSeoAnalytics;
+  inboxMessages?: CMSFormSubmission[];
+  adminUsers?: CMSAdminUser[];
+  auditLogs?: CMSAuditLog[];
+  updatedAt: number;
+}
+
 
 

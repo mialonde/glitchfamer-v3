@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Volume2, Sliders, Activity, Zap, Check, RotateCcw, 
-  Sparkles, Radio, Gauge, AudioWaveform
+  Volume2, Gauge
 } from 'lucide-react';
 import { MasteringSettings, MasteringPreset } from '../types';
 import { audioEngine, AudioEngine, AudioEnginePlaybackState } from '../core/AudioEngine';
+import { Button, Badge, Card, Slider } from './ui';
 import { cn } from '../lib/utils';
 
 interface DSPMasteringPanelProps {
@@ -14,13 +14,11 @@ interface DSPMasteringPanelProps {
 export const DSPMasteringPanel: React.FC<DSPMasteringPanelProps> = ({ className }) => {
   const [mastering, setMastering] = useState<MasteringSettings>(AudioEngine.DEFAULT_MASTERING_SETTINGS);
   const [reduction, setReduction] = useState(0);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   useEffect(() => {
     const unsub = audioEngine.subscribe((st: AudioEnginePlaybackState) => {
       setMastering(st.masteringSettings);
       setReduction(st.reduction);
-      setIsAudioPlaying(st.isPlaying);
     });
     return () => unsub();
   }, []);
@@ -50,174 +48,163 @@ export const DSPMasteringPanel: React.FC<DSPMasteringPanelProps> = ({ className 
   };
 
   return (
-    <div className={cn("bg-panel border border-border-subtle p-4 rounded-lg space-y-4 select-none", className)}>
+    <Card className={cn("p-4 space-y-4 select-none", className)}>
       {/* Üst Bar: Başlık, Durum & Bypass Butonu */}
       <div className="flex items-center justify-between border-b border-border-subtle pb-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-accent/15 border border-accent/30 rounded text-accent">
-            <Volume2 size={14} />
+          <div className="p-1.5 bg-accent/15 border border-accent/30 rounded-md text-accent">
+            <Volume2 size={15} />
           </div>
           <div>
-            <h3 className="text-[11px] font-sans font-black uppercase tracking-wider text-content-primary flex items-center gap-1.5">
-              SPOTIFY & MASTERING DSP MOTORU
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-content-primary">
+                SPOTIFY & MASTERING DSP MOTORU
+              </h3>
               {mastering.enabled && (
-                <span className="text-[7.5px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded font-bold">
+                <Badge variant="success" className="text-[9px]">
                   AKTİF
-                </span>
+                </Badge>
               )}
-            </h3>
-            <p className="text-[8px] font-mono text-content-tertiary">
+            </div>
+            <p className="text-[10px] text-content-tertiary">
               Donanım hızlandırmalı Web Audio 6-bant analog modelleme zinciri
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant={mastering.enabled ? "accent" : "outline"}
+          size="xs"
           onClick={handleToggleBypass}
-          className={cn(
-            "px-3 py-1 text-[9px] font-sans font-bold uppercase tracking-wider rounded border transition-all cursor-pointer",
-            mastering.enabled
-              ? "bg-accent text-black border-accent font-black shadow-sm"
-              : "bg-surface text-content-tertiary border-border-subtle hover:text-content-primary"
-          )}
+          className="font-bold text-[10px]"
         >
-          {mastering.enabled ? '⚡ DSP AÇIK' : '⚪ BYPASS (KAPALI)'}
-        </button>
+          {mastering.enabled ? '⚡ DSP AÇIK' : '⚪ BYPASS'}
+        </Button>
       </div>
 
-      {/* 🚀 SPOTIFY -14 LUFS TEK TIKLA NORMALİZASYON VURGUSU */}
-      <div className="bg-gradient-to-r from-emerald-950/40 via-emerald-900/20 to-black border border-emerald-500/40 p-3 rounded-md flex items-center justify-between gap-3">
+      {/* SPOTIFY -14 LUFS TEK TIKLA NORMALİZASYON VURGUSU */}
+      <div className="bg-emerald-950/20 border border-emerald-500/30 p-3 rounded-lg flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-400 font-black text-xs shrink-0 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+          <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 shadow-elevation-1">
             -14
           </div>
           <div className="flex flex-col">
-            <span className="text-[9.5px] font-sans font-black text-emerald-300 uppercase tracking-wide">
+            <span className="text-xs font-bold text-emerald-300 uppercase tracking-wide">
               SPOTIFY STANDARDI (-14 LUFS) HASSAS NORMALİZASYON
             </span>
-            <span className="text-[8px] font-mono text-emerald-400/70">
+            <span className="text-[10px] text-emerald-400/80">
               Dinamik tepe noktalarını sıkıştırır, bas gövdesini ve vokal varlığını Spotify algoritmalarına optimize eder.
             </span>
           </div>
         </div>
 
-        <button
-          type="button"
+        <Button
+          size="xs"
           onClick={handleSpotifyOneClickNormalize}
-          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-[9px] font-sans font-black uppercase tracking-wider rounded transition-all shadow-md cursor-pointer shrink-0"
+          className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-[10px] uppercase tracking-wider shrink-0"
         >
           {mastering.preset === 'SPOTIFY' && mastering.enabled ? '✓ UYGULANDI' : 'TEK TIKLA UYGULA'}
-        </button>
+        </Button>
       </div>
 
       {/* Hazır Mastering Presets */}
       <div className="space-y-1.5">
-        <span className="text-[9px] font-sans font-bold text-content-secondary uppercase tracking-widest block">
+        <span className="text-[10px] font-mono font-bold text-content-secondary uppercase tracking-wider block">
           MASTERING PROFİLLERİ
         </span>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
           {(['SPOTIFY', 'YOUTUBE', 'TIKTOK_BASS', 'PHONK', 'LOFI_WARM', 'CINEMATIC'] as MasteringPreset[]).map((preset) => {
             const isCurrent = mastering.enabled && mastering.preset === preset;
             return (
-              <button
+              <Button
                 key={preset}
-                type="button"
+                variant={isCurrent ? "accent" : "outline"}
+                size="xs"
                 onClick={() => handleApplyPreset(preset)}
                 className={cn(
-                  "p-2 text-center border rounded text-[8.5px] font-sans uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5",
-                  isCurrent
-                    ? "bg-accent text-black border-accent font-black shadow-sm"
-                    : "bg-surface text-content-secondary border-border-subtle hover:border-border-strong hover:text-content-primary"
+                  "text-[10px] font-mono uppercase h-auto py-1.5 flex-col gap-0.5",
+                  isCurrent && "shadow-elevation-1"
                 )}
               >
                 <span className="truncate w-full">{preset.replace('_', ' ')}</span>
-                {isCurrent && <span className="text-[7px] opacity-80">AKTİF</span>}
-              </button>
+                {isCurrent && <span className="text-[8px] opacity-80">AKTİF</span>}
+              </Button>
             );
           })}
         </div>
       </div>
 
       {/* İnce Ayar Parametreleri (EQ, Saturation, Output) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-surface p-3 rounded border border-border-subtle">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-surface/50 p-3 rounded-lg border border-border-subtle">
         {/* Bas Güçlendirme */}
         <div className="space-y-1">
-          <div className="flex justify-between text-[8.5px] font-mono text-content-secondary">
+          <div className="flex justify-between text-[10px] font-mono text-content-secondary">
             <span>BASS BOOST (80Hz):</span>
             <span className="text-accent font-bold">{(mastering.bassBoost ?? 0).toFixed(1)} dB</span>
           </div>
-          <input
-            type="range"
-            min="-6"
-            max="12"
-            step="0.5"
+          <Slider
+            min={-6}
+            max={12}
+            step={0.5}
             disabled={!mastering.enabled}
             value={mastering.bassBoost ?? 0}
-            onChange={(e) => handleUpdateParam('bassBoost', parseFloat(e.target.value))}
-            className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer disabled:opacity-40"
+            onChange={(val) => handleUpdateParam('bassBoost', val)}
           />
         </div>
 
         {/* Mid Presence */}
         <div className="space-y-1">
-          <div className="flex justify-between text-[8.5px] font-mono text-content-secondary">
+          <div className="flex justify-between text-[10px] font-mono text-content-secondary">
             <span>MID PRESENCE (1.5kHz):</span>
             <span className="text-accent font-bold">{(mastering.midPresence ?? 0).toFixed(1)} dB</span>
           </div>
-          <input
-            type="range"
-            min="-6"
-            max="8"
-            step="0.5"
+          <Slider
+            min={-6}
+            max={8}
+            step={0.5}
             disabled={!mastering.enabled}
             value={mastering.midPresence ?? 0}
-            onChange={(e) => handleUpdateParam('midPresence', parseFloat(e.target.value))}
-            className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer disabled:opacity-40"
+            onChange={(val) => handleUpdateParam('midPresence', val)}
           />
         </div>
 
         {/* Treble Air */}
         <div className="space-y-1">
-          <div className="flex justify-between text-[8.5px] font-mono text-content-secondary">
+          <div className="flex justify-between text-[10px] font-mono text-content-secondary">
             <span>TREBLE AIR (10kHz):</span>
             <span className="text-accent font-bold">{(mastering.trebleAir ?? 0).toFixed(1)} dB</span>
           </div>
-          <input
-            type="range"
-            min="-6"
-            max="10"
-            step="0.5"
+          <Slider
+            min={-6}
+            max={10}
+            step={0.5}
             disabled={!mastering.enabled}
             value={mastering.trebleAir ?? 0}
-            onChange={(e) => handleUpdateParam('trebleAir', parseFloat(e.target.value))}
-            className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer disabled:opacity-40"
+            onChange={(val) => handleUpdateParam('trebleAir', val)}
           />
         </div>
 
         {/* Tape Saturation */}
         <div className="space-y-1">
-          <div className="flex justify-between text-[8.5px] font-mono text-content-secondary">
+          <div className="flex justify-between text-[10px] font-mono text-content-secondary">
             <span>TAPE SATURATION:</span>
             <span className="text-accent font-bold">{Math.round((mastering.saturation ?? 0) * 100)}%</span>
           </div>
-          <input
-            type="range"
-            min="0"
-            max="0.8"
-            step="0.05"
+          <Slider
+            min={0}
+            max={0.8}
+            step={0.05}
             disabled={!mastering.enabled}
             value={mastering.saturation ?? 0}
-            onChange={(e) => handleUpdateParam('saturation', parseFloat(e.target.value))}
-            className="w-full h-1 bg-hover accent-[#FFD700] appearance-none cursor-pointer disabled:opacity-40"
+            onChange={(val) => handleUpdateParam('saturation', val)}
           />
         </div>
       </div>
 
       {/* Gain Reduction & Kompresör Göstergesi */}
-      <div className="flex items-center justify-between text-[8.5px] font-mono text-content-tertiary bg-surface/50 px-3 py-1.5 rounded border border-border-subtle">
+      <div className="flex items-center justify-between text-[10px] font-mono text-content-tertiary bg-surface/30 px-3 py-1.5 rounded-md border border-border-subtle">
         <div className="flex items-center gap-2">
-          <Gauge size={12} className={reduction < -0.5 ? "text-amber-400" : "text-content-tertiary"} />
+          <Gauge size={13} className={reduction < -0.5 ? "text-amber-400" : "text-content-tertiary"} />
           <span>GAIN REDUCTION:</span>
           <span className="text-content-primary font-bold">{reduction.toFixed(1)} dB</span>
         </div>
@@ -226,6 +213,7 @@ export const DSPMasteringPanel: React.FC<DSPMasteringPanelProps> = ({ className 
           <span className="text-accent font-bold">{mastering.lufsTarget || -14} LUFS</span>
         </div>
       </div>
-    </div>
+    </Card>
   );
 };
+

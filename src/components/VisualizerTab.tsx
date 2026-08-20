@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Sparkles, Search, User, Box, Upload } from "lucide-react";
 import { VisualizerSettings, VisualizerMode } from "../types";
+import { useCMS } from "../context/CMSContext";
 import { 
   VISUALIZER_MODES, 
   VRM_AVATAR_MODELS, 
@@ -20,12 +21,13 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
   onUpdateSettings,
   onFileUpload
 }) => {
+  const { activeVisualizerModes } = useCMS();
   const [visualizerSearch, setVisualizerSearch] = useState('');
   const [visualizerCategory, setVisualizerCategory] = useState<'ALL' | 'CINEMATIC' | 'LIQUID' | 'MINIMAL' | 'ORB' | 'CONCERT' | 'GEOMETRIC' | 'RHYTHM' | 'ARCHIVE'>('ALL');
   const [showAllModes, setShowAllModes] = useState(false);
 
-  // Filtrelenmiş modlar
-  const filteredVisualizers = VISUALIZER_MODES.filter(m => {
+  // Filtrelenmiş modlar (CMS aktiflik durumu ile senkron)
+  const filteredVisualizers = (activeVisualizerModes || VISUALIZER_MODES).filter(m => {
     if (!showAllModes && !m.isCurated) return false;
     if (visualizerCategory !== 'ALL' && m.cat !== visualizerCategory) return false;
     if (visualizerSearch.trim()) {
@@ -37,6 +39,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
     }
     return true;
   });
+
 
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-150">

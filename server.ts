@@ -9,6 +9,7 @@ import adminRouter from "./server/routes/admin";
 import lyricsRouter from "./server/routes/lyrics";
 import sunoRouter from "./server/routes/suno";
 import renderRouter from "./server/routes/render";
+import { getPublicCMSConfig } from "./server/services/cmsConfigService";
 
 async function startServer() {
   const app = express();
@@ -91,6 +92,15 @@ async function startServer() {
   app.use("/api", lyricsRouter);
   app.use("/api", sunoRouter);
   app.use("/api/render", renderRouter);
+
+  // Public CMS App Config
+  app.get("/api/app-config", (req, res) => {
+    try {
+      res.json(getPublicCMSConfig());
+    } catch (err: any) {
+      res.status(500).json({ error: "Config yüklenemedi." });
+    }
+  });
 
   // API Route for health check
   app.get("/api/health", (req, res) => {
