@@ -15,6 +15,22 @@
 
 ## 🕒 2. İlerleme Logu & Değişiklik Geçmişi (Progress & Change Log)
 
+### [2026-08-20 - Oturum 74] - GitHub Import Migration, Lock File Cleanup & Validation
+- **Görev & İstek:**
+  - AI Studio GitHub Import Migration protokolünün (`/skills/system_skills/github_import_migration/SKILL.md`) uygulanması ve projenin platform üzerinde doğrulanması.
+- **Yapılan İyileştirmeler:**
+  1. **Depo Normalizasyonu**:
+     - Standart dışı paket yöneticisi kilit dosyası `bun.lock` kaldırıldı.
+     - `.env.example` dosyası oluşturuldu ve `GEMINI_API_KEY` dokümante edildi.
+  2. **Derleme ve Sağlık Doğrulaması**:
+     - `lint_applet` (`tsc --noEmit`): %100 Başarılı (0 hata).
+     - `compile_applet` (`npm run build`): %100 Başarılı.
+     - Test paketi (`npm test`): 8/8 test başarılı.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+
 ### [2026-08-20 - Oturum 73] - Update Default Track Info, Preset Fixes & Sync Issue
 - **Kullanıcı Geri Bildirimi:**
   - "düzelmedi. ayrıca suno üzerinden çektiğim şarkıda sanatçı adı şarkı adı niye farklı çıkıyor? Hiçbir şey yokken default şarkıcı adı: Demo Singer olsun şarkı adı da : Demo Song olsun. Default Preset de default preset olsun."
