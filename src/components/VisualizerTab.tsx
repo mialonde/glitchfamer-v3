@@ -233,6 +233,16 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 className="w-full bg-transparent text-[8.5px] font-sans text-content-secondary placeholder:text-content-tertiary outline-none"
               />
             </div>
+
+            {settings.vrmModelUrl && settings.vrmModelUrl !== '/models/AliciaSolid.vrm' && (
+              <button
+                type="button"
+                onClick={() => onUpdateSettings({ vrmModelUrl: '/models/AliciaSolid.vrm', vrmModelName: 'AliciaSolid.vrm' })}
+                className="w-full py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/50 text-red-400 text-[8px] font-sans font-bold uppercase tracking-wider rounded transition-all cursor-pointer text-center"
+              >
+                🗑️ Modeli Sıfırla (AliciaSolid)
+              </button>
+            )}
           </div>
 
           <div className="space-y-1.5 pt-2 border-t border-border-subtle">

@@ -109,11 +109,11 @@ export const StudioTopBar: React.FC<StudioTopBarProps> = ({
         <button
           type="button"
           onClick={onOpenTemplates}
-          className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 sm:px-3 py-1.5 rounded-sm text-[9.5px] sm:text-[10px] font-sans font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-[0_0_10px_rgba(245,158,11,0.1)]"
-          title="Müzik Türü ve Mood Şablonları (Arabesk, Trap, Phonk, Pop, Lo-Fi)"
+          className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 px-2.5 sm:px-3 py-1.5 rounded-sm text-[9.5px] sm:text-[10px] font-sans font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+          title="Müzik Türü ve Mood Presetleri (Rebellion, Space, Digital Abyss, Forest, vb.)"
         >
-          <Sparkles size={12} className="text-amber-400" />
-          <span className="hidden sm:inline">ŞABLONLAR</span>
+          <Sparkles size={12} className="text-amber-400 animate-pulse" />
+          <span className="hidden sm:inline">PRESET SEÇ</span>
         </button>
 
         <button

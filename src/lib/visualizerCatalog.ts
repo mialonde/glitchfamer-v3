@@ -91,6 +91,8 @@ export const VISUALIZER_MODES: VisualizerModeEntry[] = [
   { id: 'FLUID_METABALL', label: 'FLUID METABALL', cat: 'LIQUID', catLabel: 'LIQUID PERFORMER', desc: 'Reaktif cıva/sıvı metaball simülasyonu, kick damlaları & parmak karıştırma', isCurated: true },
 
   // CATEGORY 3 — Minimal Release (Spotify Canvas / Single Kapak)
+  { id: 'STUDIO_SPLIT_LYRICS', label: 'STUDIO SPLIT LYRICS', cat: 'MINIMAL', catLabel: 'MINIMAL RELEASE', desc: 'Sol panelde albüm kapağı, FLAC rozeti, ilerleme çubuğu ve player; sağ panelde Apple Music / Spotify TV stili akan senkronize şarkı sözleri', isCurated: true },
+  { id: 'COVER_PULSE_3D', label: 'COVER PULSE 3D', cat: 'MINIMAL', catLabel: 'MINIMAL RELEASE', desc: '3D albüm kapağı, otomatik kapak renk paleti, yan EQ dalgaları, ışık darbeleri, ıslak zemin yansıması & Spotify/YouTube player', isCurated: true },
   { id: 'CIRCULAR_AURA_SPECTRUM', label: 'CIRCULAR AURA EQ', cat: 'MINIMAL', catLabel: 'MINIMAL RELEASE', desc: 'Albüm kapağı merkezli dairesel spektrum, nefes alan aura & çift dokunma modları', isCurated: true },
   { id: 'KINETIC_TYPO_GLITCH', label: 'KINETIC GLITCH TYPO', cat: 'MINIMAL', catLabel: 'MINIMAL RELEASE', desc: 'Frekans genleşmeli kinetik tipografi, vokal neon aura & glitch parçalanma', isCurated: true },
   { id: 'SPECTRUM', label: 'NEON SPECTRUM', cat: 'MINIMAL', catLabel: 'MINIMAL RELEASE', desc: 'Hassas logaritmik stüdyo spektrum barları ve tepe noktaları', isCurated: true },

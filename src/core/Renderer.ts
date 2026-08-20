@@ -1,4 +1,4 @@
-import { AudioEvents, RenderContext, IVisualizer, VisualizerSettings, UserInteractionState } from '../types';
+import { AudioEvents, RenderContext, IVisualizer, VisualizerSettings, UserInteractionState, LyricsStyle } from '../types';
 
 import { SimulationVisualizer } from '../visualizers/SimulationVisualizer';
 import { MonolithVisualizer } from '../visualizers/MonolithVisualizer';
@@ -38,6 +38,8 @@ import { VrmAnimeHybridVisualizer } from '../visualizers/VrmAnimeHybridVisualize
 import { NeuralBloomVisualizer } from '../visualizers/NeuralBloomVisualizer';
 import { DreamPerformerVisualizer } from '../visualizers/DreamPerformerVisualizer';
 import { NeuralNoirVisualizer } from '../visualizers/NeuralNoirVisualizer';
+import { CoverPulse3DVisualizer } from '../visualizers/CoverPulse3DVisualizer';
+import { StudioSplitLyricsVisualizer } from '../visualizers/StudioSplitLyricsVisualizer';
 
 interface Particle {
   x: number;
@@ -96,6 +98,8 @@ export class StudioRenderer {
   // Tüm görsel modları lazy factory olarak kaydediyoruz
   private initRegistry() {
     const mods: [string, () => IVisualizer][] = [
+      ['STUDIO_SPLIT_LYRICS', () => new StudioSplitLyricsVisualizer()],
+      ['COVER_PULSE_3D', () => new CoverPulse3DVisualizer()],
       ['SIMULATION', () => new SimulationVisualizer()],
       ['MONOLITH', () => new MonolithVisualizer()],
       ['NOIRGRID', () => new NoirGridVisualizer()],
@@ -797,8 +801,22 @@ export class StudioRenderer {
   }
 
   private drawOverlays(context: RenderContext) {
-    const { ctx, width, height, settings } = context;
+    const { ctx, width, height, audio, settings } = context;
     const layout = settings.cardLayout || 'DEFAULT';
+
+    // STUDIO_SPLIT_LYRICS modu kendi bölünmüş ekran arayüzünde albüm kapağını, şarkı/sanatçı künyesini
+    // ve senkronize liriklerini (sol/sağ panel) zaten tam stüdyo kalitesinde çizer.
+    // Bu modda orta ekranda çakışan mükerrer varsayılan kart, tipografi ve global lirik overlay'i atlanır.
+    if (settings.mode === 'STUDIO_SPLIT_LYRICS') {
+      if (this.logoImage) {
+        ctx.save();
+        const logoSize = Math.min(70, Math.floor(width * 0.06));
+        ctx.globalAlpha = 0.85;
+        ctx.drawImage(this.logoImage, width - logoSize - 30, height - logoSize - 30, logoSize, logoSize);
+        ctx.restore();
+      }
+      return;
+    }
 
     if (layout === 'NEON_FRAME') {
       this.drawNeonFrameLayout(context);
@@ -824,6 +842,12 @@ export class StudioRenderer {
       this.drawGlassCardLayout(context);
     } else {
       this.drawDefaultLayout(context);
+    }
+
+    // 2. Kinetik Lirikler (Magic Sync & Tipografi Katmanı)
+    // TÜM PRESETLERDE VE KART MODLARINDA EN ÜST KATMAN OLARAK GARANTİLİ ÇİZİLİR
+    if (settings.lyricsEnabled !== false && settings.syncedLyrics && settings.syncedLyrics.length > 0) {
+      this.drawLyricsLayer(ctx, width, height, audio, settings);
     }
 
     // Always draw Logo / Watermark if enabled (except on dense TikTok layout)
@@ -1582,44 +1606,6 @@ export class StudioRenderer {
     ctx.stroke();
     ctx.restore();
 
-    // 4. Karaoke Kinetic Lyrics (Smooth 3-line scroll)
-    const lyricsCenterY = coverY + coverSize + (isVertical ? 75 : 55);
-    if (settings.lyricsEnabled !== false && settings.syncedLyrics && settings.syncedLyrics.length > 0) {
-      ctx.save();
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      const activeIdx = settings.syncedLyrics.findIndex(
-        line => audio.time >= line.startTime && audio.time <= line.endTime
-      );
-
-      const linesToDraw: { text: string; active: boolean; offset: number }[] = [];
-      if (activeIdx !== -1) {
-        if (activeIdx > 0) linesToDraw.push({ text: settings.syncedLyrics[activeIdx - 1].text, active: false, offset: -36 });
-        linesToDraw.push({ text: settings.syncedLyrics[activeIdx].text, active: true, offset: 0 });
-        if (activeIdx < settings.syncedLyrics.length - 1) linesToDraw.push({ text: settings.syncedLyrics[activeIdx + 1].text, active: false, offset: 36 });
-      } else {
-        linesToDraw.push({ text: settings.syncedLyrics[0].text, active: true, offset: 0 });
-      }
-
-      linesToDraw.forEach(l => {
-        const ly = lyricsCenterY + l.offset;
-        if (l.active) {
-          ctx.font = `800 ${Math.min(24, Math.floor(width * 0.038))}px "Space Grotesk", sans-serif`;
-          ctx.fillStyle = '#FFFFFF';
-          ctx.shadowColor = primaryColor;
-          ctx.shadowBlur = 16 * (1 + audio.kick * 0.3);
-          ctx.fillText(l.text.toUpperCase(), width / 2, ly);
-        } else {
-          ctx.font = `600 ${Math.min(16, Math.floor(width * 0.025))}px "Space Grotesk", sans-serif`;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
-          ctx.shadowBlur = 0;
-          ctx.fillText(l.text.toUpperCase(), width / 2, ly);
-        }
-      });
-      ctx.restore();
-    }
-
     // 5. Floating Spotify Player Bar (Bottom Widget)
     const playerW = Math.min(width * 0.90, 520);
     const playerH = 92;
@@ -2206,23 +2192,6 @@ export class StudioRenderer {
     const waveY = textY + 80;
     this.drawReactiveWaveform(ctx, waveX, waveY, waveW, 44, audio, primaryColor);
 
-    // 6. Subtitle Lyrics (If enabled)
-    if (settings.lyricsEnabled !== false && settings.syncedLyrics && settings.syncedLyrics.length > 0) {
-      ctx.save();
-      const activeLine = settings.syncedLyrics.find(
-        line => audio.time >= line.startTime && audio.time <= line.endTime
-      );
-      if (activeLine) {
-        ctx.textAlign = 'center';
-        ctx.font = `800 ${Math.min(22, (settings.lyricsFontSize || 40) * 0.65)}px "Space Grotesk", sans-serif`;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.shadowColor = '#000000';
-        ctx.shadowBlur = 10;
-        ctx.fillText(activeLine.text.toUpperCase(), width / 2, height * 0.07);
-      }
-      ctx.restore();
-    }
-
     ctx.restore();
   }
 
@@ -2234,49 +2203,6 @@ export class StudioRenderer {
     const isVertical = height > width;
 
     ctx.save();
-
-    // 1. Dynamic Center Kinetic Karaoke Subtitle
-    if (settings.lyricsEnabled !== false && settings.syncedLyrics && settings.syncedLyrics.length > 0) {
-      const activeLine = settings.syncedLyrics.find(
-        line => audio.time >= line.startTime && audio.time <= line.endTime
-      );
-
-      if (activeLine) {
-        ctx.save();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        const lyricText = activeLine.text.toUpperCase();
-        const baseSize = settings.lyricsFontSize || 38;
-        const scale = 1 + (audio.kick * 0.14 * settings.intensity);
-        
-        ctx.translate(width / 2, isVertical ? height * 0.44 : height * 0.40);
-        ctx.scale(scale, scale);
-
-        ctx.font = `900 ${baseSize * 0.95}px "Space Grotesk", sans-serif`;
-        const textMetrics = ctx.measureText(lyricText);
-        const padH = 26;
-        const padV = 14;
-        const boxW = textMetrics.width + padH * 2;
-        const boxH = baseSize * 1.2 + padV * 2;
-
-        // Frosted Rounded Glass Badge for Subtitles
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
-        ctx.shadowBlur = 20;
-        ctx.fillStyle = 'rgba(10, 10, 14, 0.88)';
-        ctx.strokeStyle = primaryColor;
-        ctx.lineWidth = 1.5;
-        this.drawSafeRoundRect(ctx, -boxW / 2, -boxH / 2, boxW, boxH, 16);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.shadowColor = primaryColor;
-        ctx.shadowBlur = 12 * audio.energy;
-        ctx.fillText(lyricText, 0, 2);
-        ctx.restore();
-      }
-    }
 
     // 2. Native TikTok Sound Pill (Bottom Left)
     const soundPillX = width * 0.05;
@@ -2662,7 +2588,7 @@ export class StudioRenderer {
   }
 
   private drawDefaultLayout({ ctx, width, height, audio, settings }: RenderContext) {
-    const selfDrawingModes = ['RADIAL', 'GLITCH', 'SPECTRUM', 'CIRCULAR_AURA_SPECTRUM'];
+    const selfDrawingModes = ['RADIAL', 'GLITCH', 'SPECTRUM', 'CIRCULAR_AURA_SPECTRUM', 'COVER_PULSE_3D', 'STUDIO_SPLIT_LYRICS'];
     if (this.coverImage && !selfDrawingModes.includes(settings.mode) && settings.mode !== 'SIMULATION') {
       ctx.save();
       const pulse = 1 + (audio.kick * 0.06 * settings.intensity);
@@ -2685,11 +2611,6 @@ export class StudioRenderer {
 
     // 2. ŞARKI VE SANATÇI ADI (Serbest Yerleşim & Gelişmiş Tipografi)
     this.drawCustomTrackTypography(ctx, width, height, audio, settings);
-
-    // 3. Kinetik Lirikler (Magic Sync & Çeşitli Tipografi Modları)
-    if (settings.lyricsEnabled !== false && settings.syncedLyrics && settings.syncedLyrics.length > 0 && settings.mode !== 'KINETIC') {
-      this.drawLyricsLayer(ctx, width, height, audio, settings);
-    }
   }
 
   // ============================================================================
@@ -2856,159 +2777,426 @@ export class StudioRenderer {
   }
 
   private drawLyricsLayer(ctx: CanvasRenderingContext2D, width: number, height: number, audio: AudioEvents, settings: VisualizerSettings) {
-    const activeLine = settings.syncedLyrics.find(
+    if (!settings.syncedLyrics || settings.syncedLyrics.length === 0) return;
+
+    let activeIdx = -1;
+    let nextIdx = -1;
+    
+    activeIdx = settings.syncedLyrics.findIndex(
       line => audio.time >= line.startTime && audio.time <= line.endTime
     );
 
-    if (!activeLine) return;
+    nextIdx = settings.syncedLyrics.findIndex(l => l.startTime > audio.time);
+    
+    if (activeIdx === -1) {
+      if (nextIdx !== -1) {
+        activeIdx = Math.max(0, nextIdx - 1);
+      } else {
+        activeIdx = settings.syncedLyrics.length - 1;
+      }
+    }
+
+    const activeLine = activeIdx !== -1 ? settings.syncedLyrics[activeIdx] : null;
+    const style: LyricsStyle = settings.lyricsStyle || 'BETTER_FLOW';
+
+    // In non-scrolling modes, if no line is currently actively sung, check for vocal gap countdown dots
+    const isActivelySung = activeIdx !== -1 && activeLine && audio.time >= activeLine.startTime && audio.time <= activeLine.endTime;
+    const isVocalGap = !isActivelySung && nextIdx !== -1 && settings.syncedLyrics[nextIdx] && (settings.syncedLyrics[nextIdx].startTime - audio.time <= 4.0) && (settings.syncedLyrics[nextIdx].startTime - audio.time >= 0.1);
+
+    if (!activeLine && !isVocalGap && style !== 'APPLE_SCROLL' && style !== 'BETTER_FLOW') return;
 
     ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     
-    // Konumlandırma (TOP, CENTER, BOTTOM)
-    let lyricY = height * 0.72;
-    if (settings.lyricsPosition === 'TOP') lyricY = height * 0.22;
-    if (settings.lyricsPosition === 'CENTER') lyricY = height * 0.50;
+    // 1. Precise Coordinate Placement (% or Preset)
+    let lyricY: number;
+    if (settings.lyricsY !== undefined) {
+      lyricY = (settings.lyricsY / 100) * height;
+    } else if (settings.lyricsPosition === 'TOP') {
+      lyricY = height * 0.14;
+    } else if (settings.lyricsPosition === 'CENTER') {
+      lyricY = height * 0.50;
+    } else if (settings.lyricsPosition === 'CUSTOM') {
+      lyricY = (settings.lyricsY ?? 88) / 100 * height;
+    } else {
+      // Default: True BOTTOM alignment
+      lyricY = height * 0.86;
+    }
+
+    let lyricX: number;
+    if (settings.lyricsX !== undefined) {
+      lyricX = (settings.lyricsX / 100) * width;
+    } else {
+      lyricX = width / 2;
+    }
 
     const baseSize = settings.lyricsFontSize || 42;
-    const style = settings.lyricsStyle || 'KINETIC';
+    const fontFamily = settings.lyricsFontFamily ? `"${settings.lyricsFontFamily}", sans-serif` : '"Space Grotesk", sans-serif';
     const mainColor = settings.lyricsColor || settings.primaryColor || '#FFD700';
+    const highlightColor = settings.lyricsHighlightColor || '#FFFFFF';
+    const glowIntensity = settings.lyricsGlow ?? 22;
+    const beatReactivity = settings.lyricsBeatReactive !== false ? (settings.lyricsBeatScale ?? 1.0) : 0;
+    const align = settings.lyricsAlign || 'center';
+    const showVocalDots = settings.lyricsShowVocalGapDots !== false;
+    const blurInactive = Boolean(settings.lyricsBlurInactive);
 
-    ctx.translate(width / 2, lyricY);
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
 
-    if (style === 'KINETIC') {
-      // Dinamik Büyüyen Vuruşlu Kinetik Tipografi
-      const scale = 1 + (audio.kick * 0.18 * settings.intensity);
-      ctx.scale(scale, scale);
+    // === VOCAL GAP COUNTDOWN DOTS (Apple Music & BetterLyrics Signature •••) ===
+    if (!activeLine && isVocalGap && showVocalDots && nextIdx !== -1) {
+      const nextLine = settings.syncedLyrics[nextIdx];
+      const remainingTime = nextLine.startTime - audio.time;
+      const progress = Math.max(0, Math.min(1, 1 - (remainingTime / 3.0))); // 3s countdown
+      const dotCount = 3;
+      const dotSpacing = 28;
+      const startDotX = lyricX - ((dotCount - 1) * dotSpacing) / 2;
 
-      ctx.font = `900 ${baseSize}px "Space Grotesk", sans-serif`;
-      ctx.fillStyle = mainColor;
-      ctx.shadowColor = mainColor;
-      ctx.shadowBlur = 20 * audio.energy;
-      ctx.fillText(activeLine.text.toUpperCase(), 0, 0);
+      ctx.save();
+      ctx.translate(startDotX, lyricY);
+      for (let d = 0; d < dotCount; d++) {
+        const dotThreshold = (d + 1) / (dotCount + 1);
+        const isLit = progress >= dotThreshold;
+        const dotScale = isLit ? 1.0 + (audio.kick * 0.25 * beatReactivity) : 0.7;
+        const dx = d * dotSpacing;
 
-    } else if (style === 'KARAOKE') {
-      // Kelime Kelime Parlayan Karaoke Efekti
-      ctx.font = `800 ${baseSize * 0.9}px "Space Grotesk", sans-serif`;
-      
-      const words = activeLine.words && activeLine.words.length > 0
-        ? activeLine.words
-        : activeLine.text.split(' ').map((w, idx, arr) => {
-            const span = (activeLine.endTime - activeLine.startTime) / arr.length;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(dx, 0, 7 * dotScale, 0, Math.PI * 2);
+        if (isLit) {
+          ctx.fillStyle = mainColor;
+          if (glowIntensity > 0) {
+            ctx.shadowColor = mainColor;
+            ctx.shadowBlur = glowIntensity * 1.5;
+          }
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+          ctx.shadowBlur = 0;
+        }
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    // === STYLE 1 & 2: BETTER_FLOW & APPLE_SCROLL (Multi-Line Spring Flow & Word Sweep) ===
+    if (style === 'BETTER_FLOW' || style === 'APPLE_SCROLL') {
+      const currentIdx = activeIdx !== -1 ? activeIdx : (
+        nextIdx !== -1 ? Math.max(0, nextIdx - 1) : settings.syncedLyrics.length - 1
+      );
+
+      const lineCount = settings.lyricsLineCount || 3;
+      const lineSpacing = baseSize * 1.45;
+      const inactiveOpacity = settings.lyricsInactiveOpacity ?? 0.32;
+
+      ctx.translate(lyricX, lyricY);
+
+      // Önceki Satırlar (Previous Lines)
+      if (lineCount >= 5 && currentIdx > 1) {
+        ctx.save();
+        if (blurInactive && typeof (ctx as any).filter !== 'undefined') (ctx as any).filter = 'blur(3px)';
+        ctx.font = `600 ${baseSize * 0.62}px ${fontFamily}`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${inactiveOpacity * 0.45})`;
+        ctx.fillText(settings.syncedLyrics[currentIdx - 2].text, 0, -lineSpacing * 2);
+        ctx.restore();
+      }
+      if (currentIdx > 0) {
+        ctx.save();
+        if (blurInactive && typeof (ctx as any).filter !== 'undefined') (ctx as any).filter = 'blur(1.5px)';
+        ctx.font = `700 ${baseSize * 0.76}px ${fontFamily}`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${inactiveOpacity})`;
+        ctx.fillText(settings.syncedLyrics[currentIdx - 1].text, 0, -lineSpacing);
+        ctx.restore();
+      }
+
+      // Aktif Satır (Active Line - BetterLyrics Fluid Word Sweep & Long-Note Glow)
+      if (settings.syncedLyrics[currentIdx]) {
+        const curLine = settings.syncedLyrics[currentIdx];
+        const isCurrentTimeActive = activeIdx === currentIdx;
+        const kickScale = isCurrentTimeActive ? (1 + (audio.kick * 0.09 * beatReactivity * settings.intensity)) : 1.0;
+        
+        ctx.save();
+        ctx.scale(kickScale, kickScale);
+
+        // Eğer kelime bazlı zamanlama varsa ve BETTER_FLOW modundaysa: Akıllı Degrade Kelime Doldurma
+        if (style === 'BETTER_FLOW' && curLine.words && curLine.words.length > 0 && isCurrentTimeActive) {
+          ctx.font = `900 ${baseSize}px ${fontFamily}`;
+          const words = curLine.words;
+          const wordMetrics = words.map(w => {
+            const wText = w.word + " ";
+            const wWidth = ctx.measureText(wText).width;
+            const wDur = Math.max(0.1, w.endTime - w.startTime);
+            const wProgress = Math.max(0, Math.min(1, (audio.time - w.startTime) / wDur));
+            const isWordActive = audio.time >= w.startTime && audio.time <= w.endTime;
+            const isWordPast = audio.time > w.endTime;
+            const isLongNote = wDur >= 0.75 && isWordActive;
+
             return {
-              word: w,
-              startTime: activeLine.startTime + (idx * span),
-              endTime: activeLine.startTime + ((idx + 1) * span)
+              word: w.word,
+              fullText: wText,
+              width: wWidth,
+              progress: isWordPast ? 1.0 : (isWordActive ? wProgress : 0.0),
+              isActive: isWordActive,
+              isPast: isWordPast,
+              isLongNote,
+              wDur
             };
           });
 
-      // Kelimelerin toplam genişliğini hesapla ve ortala
-      const wordMetrics = words.map(w => {
-        const upperWord = w.word.toUpperCase();
-        return {
-          word: upperWord,
-          wWidth: ctx.measureText(upperWord + " ").width,
-          isActive: audio.time >= w.startTime && audio.time <= w.endTime,
-          isPast: audio.time > w.endTime
-        };
-      });
+          const totalLineW = wordMetrics.reduce((acc, w) => acc + w.width, 0);
+          let cursorX = align === 'center' ? -totalLineW / 2 : (align === 'left' ? 0 : -totalLineW);
 
-      const totalW = wordMetrics.reduce((acc, curr) => acc + curr.wWidth, 0);
-      let currentX = -totalW / 2;
+          ctx.textAlign = 'left';
+          wordMetrics.forEach(wItem => {
+            // Long Note Sustained Glow (Apple Music / BetterLyrics Signature)
+            if (wItem.isLongNote && settings.lyricsLongNoteGlow !== false) {
+              ctx.save();
+              ctx.fillStyle = mainColor;
+              ctx.shadowColor = mainColor;
+              ctx.shadowBlur = (glowIntensity + 15) * (1 + audio.energy * 0.8);
+              ctx.fillText(wItem.word, cursorX, -audio.kick * 3 * beatReactivity);
+              ctx.restore();
+            }
 
-      ctx.textAlign = 'left';
-      wordMetrics.forEach(item => {
-        if (item.isActive) {
-          ctx.fillStyle = mainColor;
-          ctx.shadowColor = mainColor;
-          ctx.shadowBlur = 25;
-          ctx.fillText(item.word.toUpperCase(), currentX, -audio.kick * 4);
-        } else if (item.isPast) {
-          ctx.fillStyle = '#FFFFFF';
-          ctx.shadowBlur = 0;
-          ctx.fillText(item.word.toUpperCase(), currentX, 0);
+            if (wItem.isActive) {
+              // Aktif kelime: Sol-sağ dolum geçişi
+              ctx.save();
+              const grad = ctx.createLinearGradient(cursorX, 0, cursorX + wItem.width, 0);
+              const p = Math.max(0.01, Math.min(0.99, wItem.progress));
+              grad.addColorStop(0, mainColor);
+              grad.addColorStop(p, mainColor);
+              grad.addColorStop(Math.min(1, p + 0.05), 'rgba(255, 255, 255, 0.45)');
+              grad.addColorStop(1, 'rgba(255, 255, 255, 0.45)');
+
+              ctx.fillStyle = grad;
+              if (glowIntensity > 0) {
+                ctx.shadowColor = mainColor;
+                ctx.shadowBlur = glowIntensity * (1 + audio.energy * 0.6);
+              }
+              ctx.fillText(wItem.word, cursorX, -audio.kick * 3 * beatReactivity);
+              ctx.restore();
+            } else if (wItem.isPast) {
+              ctx.save();
+              ctx.fillStyle = mainColor;
+              ctx.shadowBlur = 0;
+              ctx.fillText(wItem.word, cursorX, 0);
+              ctx.restore();
+            } else {
+              ctx.save();
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+              ctx.shadowBlur = 0;
+              ctx.fillText(wItem.word, cursorX, 0);
+              ctx.restore();
+            }
+
+            cursorX += wItem.width;
+          });
         } else {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-          ctx.shadowBlur = 0;
-          ctx.fillText(item.word.toUpperCase(), currentX, 0);
+          // Klasik Satır Dolumu
+          ctx.font = `900 ${baseSize}px ${fontFamily}`;
+          ctx.fillStyle = isCurrentTimeActive ? mainColor : '#FFFFFF';
+          if (glowIntensity > 0 && isCurrentTimeActive) {
+            ctx.shadowColor = mainColor;
+            ctx.shadowBlur = glowIntensity * (1 + audio.energy * 0.5);
+          }
+          ctx.fillText(curLine.text, 0, 0);
         }
-        currentX += item.wWidth;
-      });
 
-    } else if (style === 'SUBTITLE') {
-      // Sinematik Şeffaf Arka Plan Kutulu Altyazı
-      ctx.font = `700 ${baseSize * 0.8}px "Space Grotesk", sans-serif`;
-      const textMetrics = ctx.measureText(activeLine.text);
-      const boxPadX = 24;
-      const boxPadY = 14;
+        // Varsa İkincil Çeviri / Romanizasyon Satırı
+        if (settings.lyricsTranslationEnabled && curLine.translation) {
+          ctx.save();
+          ctx.font = `500 ${baseSize * 0.48}px ${fontFamily}`;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+          ctx.shadowBlur = 0;
+          ctx.fillText(curLine.translation, 0, baseSize * 0.75);
+          ctx.restore();
+        }
 
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-      ctx.fillRect(
-        -textMetrics.width / 2 - boxPadX, 
-        -baseSize / 2 - boxPadY, 
-        textMetrics.width + (boxPadX * 2), 
-        baseSize + (boxPadY * 2)
-      );
+        ctx.restore();
+      }
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(
-        -textMetrics.width / 2 - boxPadX, 
-        -baseSize / 2 - boxPadY, 
-        textMetrics.width + (boxPadX * 2), 
-        baseSize + (boxPadY * 2)
-      );
+      // Sonraki Satırlar (Next Lines)
+      if (currentIdx < settings.syncedLyrics.length - 1) {
+        ctx.save();
+        if (blurInactive && typeof (ctx as any).filter !== 'undefined') (ctx as any).filter = 'blur(1.5px)';
+        ctx.font = `700 ${baseSize * 0.76}px ${fontFamily}`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${inactiveOpacity})`;
+        ctx.fillText(settings.syncedLyrics[currentIdx + 1].text, 0, lineSpacing);
+        ctx.restore();
+      }
+      if (lineCount >= 5 && currentIdx < settings.syncedLyrics.length - 2) {
+        ctx.save();
+        if (blurInactive && typeof (ctx as any).filter !== 'undefined') (ctx as any).filter = 'blur(3px)';
+        ctx.font = `600 ${baseSize * 0.62}px ${fontFamily}`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${inactiveOpacity * 0.45})`;
+        ctx.fillText(settings.syncedLyrics[currentIdx + 2].text, 0, lineSpacing * 2);
+        ctx.restore();
+      }
 
-      ctx.fillStyle = '#FFFFFF';
-      ctx.shadowBlur = 0;
-      ctx.fillText(activeLine.text, 0, 0);
+    // === SINGLE LINE STYLES ===
+    } else if (activeLine) {
+      ctx.translate(lyricX, lyricY);
 
-    } else if (style === 'NEON_BOX') {
-      // Neon Çerçeveli Retro Rozet
-      ctx.font = `900 ${baseSize * 0.85}px "Space Grotesk", sans-serif`;
-      const textMetrics = ctx.measureText(activeLine.text.toUpperCase());
-      const boxPadX = 30;
-      const boxPadY = 16;
+      if (style === 'KINETIC') {
+        const scale = 1 + (audio.kick * 0.20 * (beatReactivity || 1.0) * settings.intensity);
+        ctx.scale(scale, scale);
+        ctx.font = `900 ${baseSize}px ${fontFamily}`;
+        ctx.fillStyle = mainColor;
+        if (glowIntensity > 0) {
+          ctx.shadowColor = mainColor;
+          ctx.shadowBlur = glowIntensity * audio.energy;
+        }
+        ctx.fillText(activeLine.text.toUpperCase(), 0, 0);
 
-      ctx.fillStyle = 'rgba(10, 10, 10, 0.9)';
-      ctx.fillRect(
-        -textMetrics.width / 2 - boxPadX, 
-        -baseSize / 2 - boxPadY, 
-        textMetrics.width + (boxPadX * 2), 
-        baseSize + (boxPadY * 2)
-      );
+      } else if (style === 'KARAOKE') {
+        ctx.font = `800 ${baseSize * 0.9}px ${fontFamily}`;
+        const words = activeLine.words && activeLine.words.length > 0
+          ? activeLine.words
+          : activeLine.text.split(' ').map((w, idx, arr) => {
+              const span = (activeLine.endTime - activeLine.startTime) / arr.length;
+              return {
+                word: w,
+                startTime: activeLine.startTime + (idx * span),
+                endTime: activeLine.startTime + ((idx + 1) * span)
+              };
+            });
 
-      ctx.strokeStyle = mainColor;
-      ctx.lineWidth = 2 + audio.kick * 3;
-      ctx.shadowColor = mainColor;
-      ctx.shadowBlur = 18 * audio.energy;
-      ctx.strokeRect(
-        -textMetrics.width / 2 - boxPadX, 
-        -baseSize / 2 - boxPadY, 
-        textMetrics.width + (boxPadX * 2), 
-        baseSize + (boxPadY * 2)
-      );
+        const wordMetrics = words.map(w => {
+          const upperWord = w.word.toUpperCase();
+          const wWidth = ctx.measureText(upperWord + " ").width;
+          const wDur = Math.max(0.1, w.endTime - w.startTime);
+          const wProgress = Math.max(0, Math.min(1, (audio.time - w.startTime) / wDur));
+          const isActive = audio.time >= w.startTime && audio.time <= w.endTime;
+          const isPast = audio.time > w.endTime;
+          return {
+            word: upperWord,
+            wWidth,
+            progress: isPast ? 1.0 : (isActive ? wProgress : 0.0),
+            isActive,
+            isPast,
+            isLongNote: wDur >= 0.75 && isActive
+          };
+        });
 
-      ctx.fillStyle = mainColor;
-      ctx.fillText(activeLine.text.toUpperCase(), 0, 0);
+        const totalW = wordMetrics.reduce((acc, curr) => acc + curr.wWidth, 0);
+        let currentX = align === 'center' ? -totalW / 2 : (align === 'left' ? 0 : -totalW);
 
-    } else if (style === 'CYBER_GLITCH') {
-      // Cyberpunk Glitch Karakter Kayması
-      ctx.font = `900 ${baseSize}px monospace`;
-      const glitchOffset = (Math.random() - 0.5) * 8 * audio.energy;
-      
-      // Cyan gölge
-      ctx.fillStyle = '#00F0FF';
-      ctx.fillText(activeLine.text.toUpperCase(), -glitchOffset - 3, 0);
-      
-      // Red gölge
-      ctx.fillStyle = '#FF003C';
-      ctx.fillText(activeLine.text.toUpperCase(), glitchOffset + 3, 0);
-      
-      // Ana Metin
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(activeLine.text.toUpperCase(), 0, 0);
+        ctx.textAlign = 'left';
+        wordMetrics.forEach(item => {
+          if (item.isLongNote && settings.lyricsLongNoteGlow !== false) {
+            ctx.save();
+            ctx.fillStyle = mainColor;
+            ctx.shadowColor = mainColor;
+            ctx.shadowBlur = (glowIntensity + 16) * (1 + audio.energy * 0.8);
+            ctx.fillText(item.word, currentX, -audio.kick * 4 * beatReactivity);
+            ctx.restore();
+          }
+
+          if (item.isActive) {
+            ctx.save();
+            // Sürekli degrade dolgu
+            const grad = ctx.createLinearGradient(currentX, 0, currentX + item.wWidth, 0);
+            const p = Math.max(0.01, Math.min(0.99, item.progress));
+            grad.addColorStop(0, mainColor);
+            grad.addColorStop(p, mainColor);
+            grad.addColorStop(Math.min(1, p + 0.05), 'rgba(255, 255, 255, 0.4)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0.4)');
+
+            ctx.fillStyle = grad;
+            if (glowIntensity > 0) {
+              ctx.shadowColor = mainColor;
+              ctx.shadowBlur = glowIntensity * 1.3;
+            }
+            ctx.fillText(item.word, currentX, -audio.kick * 4 * beatReactivity);
+            ctx.restore();
+          } else if (item.isPast) {
+            ctx.fillStyle = mainColor;
+            ctx.shadowBlur = 0;
+            ctx.fillText(item.word, currentX, 0);
+          } else {
+            ctx.fillStyle = `rgba(255, 255, 255, ${settings.lyricsInactiveOpacity ?? 0.38})`;
+            ctx.shadowBlur = 0;
+            ctx.fillText(item.word, currentX, 0);
+          }
+          currentX += item.wWidth;
+        });
+
+      } else if (style === 'SUBTITLE') {
+        ctx.font = `700 ${baseSize * 0.8}px ${fontFamily}`;
+        const textMetrics = ctx.measureText(activeLine.text);
+        const boxPadX = 24;
+        const boxPadY = 14;
+
+        ctx.fillStyle = 'rgba(10, 10, 14, 0.84)';
+        this.drawSafeRoundRect(
+          ctx,
+          -textMetrics.width / 2 - boxPadX, 
+          -baseSize / 2 - boxPadY, 
+          textMetrics.width + (boxPadX * 2), 
+          baseSize + (boxPadY * 2),
+          12
+        );
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.lineWidth = 1;
+        this.drawSafeRoundRect(
+          ctx,
+          -textMetrics.width / 2 - boxPadX, 
+          -baseSize / 2 - boxPadY, 
+          textMetrics.width + (boxPadX * 2), 
+          baseSize + (boxPadY * 2),
+          12
+        );
+        ctx.stroke();
+
+        ctx.fillStyle = highlightColor;
+        ctx.shadowBlur = 0;
+        ctx.fillText(activeLine.text, 0, 0);
+
+      } else if (style === 'NEON_BOX') {
+        ctx.font = `900 ${baseSize * 0.85}px ${fontFamily}`;
+        const textMetrics = ctx.measureText(activeLine.text.toUpperCase());
+        const boxPadX = 28;
+        const boxPadY = 16;
+        const boxW = textMetrics.width + (boxPadX * 2);
+        const boxH = baseSize + (boxPadY * 2);
+
+        ctx.fillStyle = 'rgba(8, 8, 12, 0.92)';
+        this.drawSafeRoundRect(ctx, -boxW / 2, -boxH / 2, boxW, boxH, 14);
+        ctx.fill();
+
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = 2 + (audio.kick * 2 * beatReactivity);
+        if (glowIntensity > 0) {
+          ctx.shadowColor = mainColor;
+          ctx.shadowBlur = glowIntensity * (1 + audio.energy);
+        }
+        this.drawSafeRoundRect(ctx, -boxW / 2, -boxH / 2, boxW, boxH, 14);
+        ctx.stroke();
+
+        ctx.fillStyle = mainColor;
+        ctx.fillText(activeLine.text.toUpperCase(), 0, 0);
+
+      } else if (style === 'CYBER_GLITCH') {
+        ctx.font = `900 ${baseSize}px monospace`;
+        const glitchOffset = (Math.random() - 0.5) * 10 * audio.energy * (beatReactivity || 1.0);
+        
+        ctx.fillStyle = '#00F0FF';
+        ctx.fillText(activeLine.text.toUpperCase(), -glitchOffset - 3, 0);
+        
+        ctx.fillStyle = '#FF003C';
+        ctx.fillText(activeLine.text.toUpperCase(), glitchOffset + 3, 0);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(activeLine.text.toUpperCase(), 0, 0);
+
+      } else if (style === 'MINIMAL') {
+        ctx.font = `700 ${baseSize}px ${fontFamily}`;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.shadowBlur = 12;
+        ctx.fillText(activeLine.text, 0, 0);
+      }
     }
 
     ctx.restore();

@@ -82,28 +82,60 @@ const resolutionPieData = [
 ];
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('vf_admin_auth') === 'true';
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
   const [adminPassword, setAdminPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetch('/api/admin/check')
+      .then(res => res.json())
+      .then(data => {
+        setIsAuthenticated(data.authenticated);
+        setIsLoadingAuth(false);
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        setIsLoadingAuth(false);
+      });
+  }, []);
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Güvenlik: Admin erişimi için yetkili parola doğrulaması
-    if (adminPassword === 'admin2026' || adminPassword === 'glitchframer_admin_secret') {
-      sessionStorage.setItem('vf_admin_auth', 'true');
-      setIsAuthenticated(true);
-      setAuthError(null);
-    } else {
-      setAuthError('Hatalı yönetici şifresi. Erişim reddedildi.');
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setAuthError(null);
+
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: adminPassword })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setIsAuthenticated(true);
+        setAuthError(null);
+      } else {
+        setAuthError(data.error || 'Hatalı yönetici şifresi. Erişim reddedildi.');
+      }
+    } catch (err) {
+      setAuthError('Sunucu bağlantı hatası.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleAdminLogout = () => {
-    sessionStorage.removeItem('vf_admin_auth');
+  const handleAdminLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } catch (_) {}
     setIsAuthenticated(false);
     onClose();
   };
@@ -397,6 +429,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     );
   };
 
+  if (isLoadingAuth) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 text-slate-100 font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
+          <p className="text-sm font-semibold tracking-wider text-slate-400 uppercase">YÖNETİCİ OTURUMU SORGULANIYOR...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 text-slate-900 font-sans">
@@ -591,6 +634,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         {/* Main Scrollable Viewport */}
         <main className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar bg-slate-50/60">
           <div className="max-w-7xl mx-auto space-y-6">
+
+            {/* DEMO VERİ / SIMULATED DATA NOTICE (Task 10) */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center text-white flex-shrink-0">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-amber-900">SIMULASYON VE DEMO VERİ MODU</h4>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Bu panelde gösterilen analitik verileri, kullanıcı istatistikleri ve A/B test sonuçları simüle edilmiş <strong>Demo Verilerdir</strong>. Gerçek bir veritabanı bağlantısı kurulana kadar bu değerler stüdyonun genel akışını test etmek için sunulmuştur.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  DEMO AKTİF
+                </span>
+              </div>
+            </div>
 
             {/* ============================================================ */}
             {/* 📊 TAB 1: OVERVIEW & PRODUCT METRICS */}

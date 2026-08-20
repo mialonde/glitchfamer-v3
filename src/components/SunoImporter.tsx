@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { 
   Music, Link2, Sparkles, AlertCircle, CheckCircle2, 
   Loader2, Play, Image as ImageIcon, FileText, ArrowRight,
-  Zap, X, RefreshCw, Layers
+  Zap, X, RefreshCw, Layers, Download, Code
 } from "lucide-react";
 import { NormalizedSunoTrack } from "../types";
 import { sunoImporter } from "../services/SunoImporterService";
@@ -32,17 +32,20 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
   onImportTrack,
   inline = false
 }) => {
+  const [inputMode, setInputMode] = useState<'URL' | 'JSON'>('URL');
   const [urlInput, setUrlInput] = useState("");
+  const [jsonInput, setJsonInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inspectedTrack, setInspectedTrack] = useState<NormalizedSunoTrack | null>(null);
   const [isDownloadingAudio, setIsDownloadingAudio] = useState(false);
   const [step, setStep] = useState<'INPUT' | 'PREVIEW'>('INPUT');
 
-  const handleInspect = async (inputUrl?: string) => {
-    const targetUrl = (inputUrl || urlInput).trim();
-    if (!targetUrl) {
-      setError("Lütfen geçerli bir Suno bağlantısı girin.");
+  const handleInspect = async (overrideValue?: string) => {
+    const rawTarget = overrideValue || (inputMode === 'URL' ? urlInput : jsonInput);
+    const target = rawTarget.trim();
+    if (!target) {
+      setError(inputMode === 'URL' ? "Lütfen geçerli bir Suno bağlantısı girin." : "Lütfen geçerli bir Suno JSON verisi girin.");
       return;
     }
 
@@ -51,11 +54,11 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
     setInspectedTrack(null);
 
     try {
-      const track = await sunoImporter.importTrack(targetUrl);
+      const track = await sunoImporter.importTrack(target);
       setInspectedTrack(track);
       setStep('PREVIEW');
     } catch (err: any) {
-      setError(err?.message || "Suno şarkısı çözümlenemedi. Lütfen bağlantıyı kontrol edin.");
+      setError(err?.message || "Suno şarkısı çözümlenemedi. Lütfen bağlantıyı veya JSON verisini kontrol edin.");
     } finally {
       setIsLoading(false);
     }
@@ -83,11 +86,57 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        setUrlInput(text.trim());
-        handleInspect(text.trim());
+        const trimmed = text.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          setInputMode('JSON');
+          setJsonInput(trimmed);
+          handleInspect(trimmed);
+        } else {
+          setInputMode('URL');
+          setUrlInput(trimmed);
+          handleInspect(trimmed);
+        }
       }
     } catch (e) {
       // Clipboard erişim kısıtlaması durumunda
+    }
+  };
+
+  const downloadFile = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadFormat = (fmt: 'LRC' | 'ELRC' | 'SRT' | 'VTT' | 'TTML' | 'JSON') => {
+    if (!inspectedTrack) return;
+    const safeTitle = (inspectedTrack.title || "suno_track").toLowerCase().replace(/[^a-z0-9_-]/gi, '_');
+    
+    switch (fmt) {
+      case 'LRC':
+        downloadFile(sunoImporter.exportToLrc(inspectedTrack.syncedLines), `${safeTitle}.lrc`, "text/plain;charset=utf-8");
+        break;
+      case 'ELRC':
+        downloadFile(sunoImporter.exportToEnhancedLrc(inspectedTrack.syncedLines), `${safeTitle}.elrc`, "text/plain;charset=utf-8");
+        break;
+      case 'SRT':
+        downloadFile(sunoImporter.exportToSrt(inspectedTrack.syncedLines), `${safeTitle}.srt`, "text/plain;charset=utf-8");
+        break;
+      case 'VTT':
+        downloadFile(sunoImporter.exportToVtt(inspectedTrack.syncedLines), `${safeTitle}.vtt`, "text/vtt;charset=utf-8");
+        break;
+      case 'TTML':
+        downloadFile(sunoImporter.exportToTtml(inspectedTrack.syncedLines, inspectedTrack.title, inspectedTrack.artist), `${safeTitle}.ttml`, "application/xml;charset=utf-8");
+        break;
+      case 'JSON':
+        downloadFile(JSON.stringify(inspectedTrack, null, 2), `${safeTitle}_suno.json`, "application/json;charset=utf-8");
+        break;
     }
   };
 
@@ -96,6 +145,7 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
     setStep('INPUT');
     setError(null);
     setUrlInput("");
+    setJsonInput("");
   };
 
   const content = (
@@ -108,13 +158,13 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
           </div>
           <div>
             <h3 className="text-xs font-mono font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-              SUNO AI LINK IMPORTER
+              SUNO AI LYRICS & TRACK STUDIO
               <span className="text-[8px] bg-[#FFD700]/20 text-[#FFD700] px-1.5 py-0.2 rounded border border-[#FFD700]/40 font-mono">
-                v2.0
+                v2.5
               </span>
             </h3>
             <p className="text-[9px] font-mono text-zinc-400">
-              Suno şarkı linkiyle anında ses, kapak, lirik ve senkronizasyon yükle
+              Suno linki veya JSON verisiyle anında ses, kapak, lirik ve senkronizasyon aktar / dışa aktar
             </p>
           </div>
         </div>
@@ -129,12 +179,36 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
         )}
       </div>
 
-      {/* STEP 1: URL Girişi */}
+      {/* STEP 1: URL / JSON Girişi */}
       {step === 'INPUT' && (
         <div className="space-y-3">
+          {/* Giriş Modu Seçimi */}
+          <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-sm border border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setInputMode('URL')}
+              className={cn(
+                "flex-1 py-1.5 text-[9px] font-mono font-bold uppercase rounded-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                inputMode === 'URL' ? "bg-[#FFD700] text-black shadow-sm" : "text-zinc-400 hover:text-white"
+              )}
+            >
+              <Link2 size={11} /> SUNO LINKI / ID
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode('JSON')}
+              className={cn(
+                "flex-1 py-1.5 text-[9px] font-mono font-bold uppercase rounded-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                inputMode === 'JSON' ? "bg-[#FFD700] text-black shadow-sm" : "text-zinc-400 hover:text-white"
+              )}
+            >
+              <Code size={11} /> HAM JSON / API PAYLOAD
+            </button>
+          </div>
+
           <div className="space-y-1.5">
-            <label className="text-[9px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
-              <span>SUNO ŞARKI BAĞLANTISI (URL VEYA ID)</span>
+            <div className="flex items-center justify-between text-[9px] font-mono font-bold text-zinc-300 uppercase">
+              <span>{inputMode === 'URL' ? "SUNO ŞARKI BAĞLANTISI (URL VEYA UUID)" : "HAM SUNO API JSON VERİSİ"}</span>
               <button
                 type="button"
                 onClick={handlePasteFromClipboard}
@@ -142,68 +216,105 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
               >
                 📋 Panodan Yapıştır
               </button>
-            </label>
-
-            <div className="relative flex items-center">
-              <Link2 size={14} className="absolute left-3 text-zinc-500" />
-              <input
-                type="text"
-                placeholder="Örn: https://suno.com/s/a2hf69thdnYq25lG veya https://suno.com/song/..."
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleInspect();
-                }}
-                className="w-full bg-black/80 border border-zinc-800 focus:border-[#FFD700] pl-8 pr-24 py-2.5 text-[10px] font-mono text-white placeholder:text-zinc-600 rounded-sm outline-none transition-colors"
-              />
-              <button
-                type="button"
-                onClick={() => handleInspect()}
-                disabled={isLoading || !urlInput.trim()}
-                className={cn(
-                  "absolute right-1.5 px-3 py-1.5 rounded-sm text-[9px] font-mono uppercase font-bold flex items-center gap-1.5 transition-all cursor-pointer",
-                  urlInput.trim() && !isLoading
-                    ? "bg-[#FFD700] text-black hover:bg-[#ffe033] shadow-[0_0_10px_rgba(255,215,0,0.2)]"
-                    : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                )}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 size={11} className="animate-spin" />
-                    ANALİZ...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={11} />
-                    ÇÖZÜMLE
-                  </>
-                )}
-              </button>
             </div>
+
+            {inputMode === 'URL' ? (
+              <div className="relative flex items-center">
+                <Link2 size={14} className="absolute left-3 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Örn: https://suno.com/s/a2hf69thdnYq25lG veya https://suno.com/song/..."
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleInspect();
+                  }}
+                  className="w-full bg-black/80 border border-zinc-800 focus:border-[#FFD700] pl-8 pr-24 py-2.5 text-[10px] font-mono text-white placeholder:text-zinc-600 rounded-sm outline-none transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleInspect()}
+                  disabled={isLoading || !urlInput.trim()}
+                  className={cn(
+                    "absolute right-1.5 px-3 py-1.5 rounded-sm text-[9px] font-mono uppercase font-bold flex items-center gap-1.5 transition-all cursor-pointer",
+                    urlInput.trim() && !isLoading
+                      ? "bg-[#FFD700] text-black hover:bg-[#ffe033] shadow-[0_0_10px_rgba(255,215,0,0.2)]"
+                      : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  )}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={11} className="animate-spin" />
+                      ANALİZ...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={11} />
+                      ÇÖZÜMLE
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <textarea
+                  rows={4}
+                  placeholder='{"id": "...", "title": "...", "audio_url": "...", "metadata": {"alignment": [...]}}'
+                  value={jsonInput}
+                  onChange={(e) => setJsonInput(e.target.value)}
+                  className="w-full bg-black/80 border border-zinc-800 focus:border-[#FFD700] p-2.5 text-[10px] font-mono text-zinc-300 placeholder:text-zinc-600 rounded-sm outline-none resize-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleInspect()}
+                  disabled={isLoading || !jsonInput.trim()}
+                  className={cn(
+                    "w-full py-2 rounded-sm text-[9px] font-mono uppercase font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                    jsonInput.trim() && !isLoading
+                      ? "bg-[#FFD700] text-black hover:bg-[#ffe033]"
+                      : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  )}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={11} className="animate-spin" />
+                      JSON AYRIŞTIRILIYOR...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={11} />
+                      JSON VERİSİNİ İÇE AKTAR
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Hızlı Örnekler */}
-          <div className="space-y-1.5 pt-1">
-            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest block">
-              VEYA HIZLI TEST İÇİN DENE:
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {SAMPLE_SUNO_LINKS.map((sample, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setUrlInput(sample.url);
-                    handleInspect(sample.url);
-                  }}
-                  className="text-[8px] font-mono bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-[#FFD700]/50 text-zinc-300 px-2 py-1 rounded-sm transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <Zap size={9} className="text-[#FFD700]" />
-                  {sample.title}
-                </button>
-              ))}
+          {inputMode === 'URL' && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest block">
+                VEYA HIZLI TEST İÇİN DENE:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {SAMPLE_SUNO_LINKS.map((sample, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setUrlInput(sample.url);
+                      handleInspect(sample.url);
+                    }}
+                    className="text-[8px] font-mono bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-[#FFD700]/50 text-zinc-300 px-2 py-1 rounded-sm transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Zap size={9} className="text-[#FFD700]" />
+                    {sample.title}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Hata Mesajı */}
           {error && (
@@ -217,10 +328,10 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
           <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-sm text-[8.5px] font-mono text-zinc-400 space-y-1">
             <div className="flex items-center gap-1.5 text-zinc-300 font-bold">
               <CheckCircle2 size={11} className="text-[#FFD700]" />
-              TAM OTOMATİK ENTEGRASYON
+              TAM OTOMATİK ENTEGRASYON (XILIOURT & LUMI-SCRIPT UYUMLU)
             </div>
             <p className="text-zinc-500 leading-relaxed">
-              Suno linki girildiğinde şarkı adı, sanatçı, kapak görseli, ses akışı ve varsa söz zamanlamaları otomatik olarak görselleştirici, 3D VRM avatar ve lip sync motoruna aktarılır.
+              Suno şarkı linki girildiğinde parça adı, sanatçı, kapak, ses akışı ve kelime bazlı senkronizasyon (Word Aligned Timestamps) otomatik çözümlenir. İster projede oynatın, ister anında .LRC/.SRT formatında indirin.
             </p>
           </div>
         </div>
@@ -281,11 +392,11 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
               <div className="flex items-center gap-2 pt-1 text-[8px] font-mono text-zinc-400">
                 <span>⏱ Süre: ~{Math.floor((inspectedTrack.duration || 180) / 60)}:{(Math.floor((inspectedTrack.duration || 180) % 60)).toString().padStart(2, '0')}</span>
                 <span>•</span>
-                <span>📝 {inspectedTrack.syncedLines.length} Lirik Satırı</span>
+                <span>📝 {inspectedTrack.syncedLines.length} Satır</span>
                 {inspectedTrack.words.length > 0 && (
                   <>
                     <span>•</span>
-                    <span>⚡ {inspectedTrack.words.length} Kelime Zamanı</span>
+                    <span>⚡ {inspectedTrack.words.length} Kelime</span>
                   </>
                 )}
               </div>
@@ -296,13 +407,70 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
           {inspectedTrack.lyrics && (
             <div className="bg-black/50 border border-white/[0.06] p-2.5 rounded-sm max-h-24 overflow-y-auto custom-scrollbar">
               <span className="text-[7.5px] font-mono font-bold text-zinc-500 uppercase tracking-wider block mb-1">
-                LİRİK METNİ ÖNİZLEMESİ
+                LİRİK METNİ ÖNİZLEMESİ (TEMİZLENMİŞ PROMPT)
               </span>
               <p className="text-[8.5px] font-mono text-zinc-300 whitespace-pre-line leading-relaxed">
                 {inspectedTrack.lyrics.slice(0, 200)}...
               </p>
             </div>
           )}
+
+          {/* xiliourt / Lumi-Script Tarzı Doğrudan Altyazı & Lirik İndirme Barı */}
+          <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-sm space-y-1.5">
+            <span className="text-[8px] font-mono font-bold text-amber-400 uppercase flex items-center gap-1">
+              <Download size={10} /> SUNO ALTYAZI VE LİRİK FORMATLARINI İNDİR:
+            </span>
+            <div className="grid grid-cols-6 gap-1">
+              <button
+                type="button"
+                onClick={() => handleDownloadFormat('LRC')}
+                className="py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-700 text-white font-mono text-[8px] font-bold rounded flex items-center justify-center gap-1 cursor-pointer"
+                title="Standart LRC indir"
+              >
+                .LRC
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadFormat('ELRC')}
+                className="py-1 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/40 text-amber-300 font-mono text-[8px] font-bold rounded flex items-center justify-center gap-1 cursor-pointer"
+                title="BetterLyrics Hece Zamanlamalı Enhanced LRC"
+              >
+                .ELRC
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadFormat('SRT')}
+                className="py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-700 text-white font-mono text-[8px] font-bold rounded flex items-center justify-center gap-1 cursor-pointer"
+                title="Video Altyazısı (SRT)"
+              >
+                .SRT
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadFormat('VTT')}
+                className="py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-700 text-white font-mono text-[8px] font-bold rounded flex items-center justify-center gap-1 cursor-pointer"
+                title="Web VTT"
+              >
+                .VTT
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadFormat('TTML')}
+                className="py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-700 text-white font-mono text-[8px] font-bold rounded flex items-center justify-center gap-1 cursor-pointer"
+                title="Apple Music TTML"
+              >
+                .TTML
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadFormat('JSON')}
+                className="py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-700 text-white font-mono text-[8px] font-bold rounded flex items-center justify-center gap-1 cursor-pointer"
+                title="Tüm Veriyle JSON"
+              >
+                .JSON
+              </button>
+            </div>
+          </div>
 
           {/* Aksiyon Butonları */}
           <div className="flex items-center gap-2 pt-1">
@@ -311,7 +479,7 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
               onClick={resetState}
               className="flex-1 py-2 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white rounded-sm text-[9px] font-mono uppercase font-bold transition-colors cursor-pointer"
             >
-              ← FARKLI LİNK GİR
+              ← YENİ SORGULA
             </button>
             <button
               type="button"
@@ -355,3 +523,4 @@ export const SunoImporter: React.FC<SunoImporterProps> = ({
     </div>
   );
 };
+

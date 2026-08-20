@@ -354,6 +354,29 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, isRecording, audioRef, analyserRef]);
 
+  // Event bus listener to force instant canvas rendering on metadata updates (bypassing any state lags)
+  useEffect(() => {
+    const handleMetadataUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        const { artistName, trackTitle } = customEvent.detail;
+        settingsRef.current = {
+          ...settingsRef.current,
+          ...(artistName !== undefined && { artistName }),
+          ...(trackTitle !== undefined && { trackTitle })
+        };
+        // Force an immediate redraw frame
+        const audioCurrentTime = audioRef.current?.currentTime || 0;
+        drawFrame(audioCurrentTime, 1 / 60);
+      }
+    };
+
+    window.addEventListener('vidframer-metadata-update', handleMetadataUpdate);
+    return () => {
+      window.removeEventListener('vidframer-metadata-update', handleMetadataUpdate);
+    };
+  }, [audioRef]);
+
   const stopActiveRecording = () => {
     if (progressTimerRef.current) {
       clearInterval(progressTimerRef.current);

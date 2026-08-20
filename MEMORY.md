@@ -13,7 +13,176 @@
 
 ---
 
-## 🕒 2. İlerleme Logu & Değişiklik Geçmişi (Progress & Change Log)Channels
+## 🕒 2. İlerleme Logu & Değişiklik Geçmişi (Progress & Change Log)
+
+### [2026-08-20 - Oturum 73] - Update Default Track Info, Preset Fixes & Sync Issue
+- **Kullanıcı Geri Bildirimi:**
+  - "düzelmedi. ayrıca suno üzerinden çektiğim şarkıda sanatçı adı şarkı adı niye farklı çıkıyor? Hiçbir şey yokken default şarkıcı adı: Demo Singer olsun şarkı adı da : Demo Song olsun. Default Preset de default preset olsun."
+- **Yapılan İyileştirmeler:**
+  1. `src/App.tsx` ve `src/types.ts` içerisindeki boş olan (veya 'Lumina' olan) `trackTitle` ve `artistName` varsayılan değerleri "Demo Song" ve "Demo Singer" olarak güncellendi.
+  2. `src/visualizers/StudioSplitLyricsVisualizer.ts` içerisinde hardcode kalmış olan "Mr. Brightside" / "The Killers" yedek metinleri kaldırılarak ayarlardan gelen dinamik veriye, yoksa "Demo Song" / "Demo Singer" değerlerine bağlandı. Aynı işlem `CoverPulse3DVisualizer.ts` içerisindeki "22NOIR" kalıntıları için de yapıldı.
+  3. `src/lib/creatorTemplatesData.ts` ve `src/services/presetService.ts` dosyalarındaki şablon tanımlarında `trackTitle` ve `artistName` alanları silindi. Şablon değiştirildiğinde mevcut şarkı adının silinmesini önlemek için `handleApplyTemplate` fonksiyonu güncellendi.
+  4. `src/services/SunoImporterService.ts` ve `server/routes/suno.ts` içerisinde Suno AI'dan veri çekilirken şarkı adı ve sanatçı adı boş, jenerik veya bulunamazsa "Demo Song" ve "Demo Singer" atanması sağlandı.
+  5. `src/visualizers/StudioSplitLyricsVisualizer.ts` içerisindeki **şarkı sözü senkronizasyonu** hatası giderildi. `isCurrentActive` kelime bazlı senkronizasyon varken, satır bazlı kontrole (`currentTime >= line.startTime && currentTime <= line.endTime`) takılarak satırın içindeki kelime okuması bitmeden veya kelime okuması yokken pasif duruma geçmesine yol açıyordu. Sadece `idx === activeIdx` olarak düzeltildi. Ayrıca activeIdx hesaplaması sadece satır okuması bittiği andaki (vocal gap durumu) ara duraklamalarda önceki satırın kalması (Apple Music stili) sağlanacak şekilde düzeltildi.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 71] - Fix Duplicate Center Overlay & Lyrics on Studio Split Lyrics
+- **Kullanıcı Geri Bildirimi & Ekran Görüntüsü Analizi:**
+  - "cover art şarkı ve şarkıcı adı ortaya da basmışsın. Aynı zamanda lyric de..."
+  - `STUDIO_SPLIT_LYRICS` modu aktifken, global Canvas katmanındaki `drawOverlays` fonksiyonunun varsayılan merkez albüm kapağını (`drawDefaultLayout`), merkezdeki şarkı/sanatçı tipografisini (`drawCustomTrackTypography`) ve global tek satırlık şarkı sözü katmanını (`drawLyricsLayer`) split ekranın tam ortasına mükerrer şekilde çizdiği tespit edildi.
+- **Yapılan İyileştirmeler:**
+  1. `src/core/Renderer.ts` -> `drawOverlays()` fonksiyonuna `STUDIO_SPLIT_LYRICS` mod koruması eklendi; sol paneldeki yerleşik player ve sağ paneldeki akan şarkı sözü motoru devredeyken ortada çakışan kart, tipografi ve global lirik overlay'i atlanıyor.
+  2. `drawDefaultLayout()` içerisindeki `selfDrawingModes` dizisine `COVER_PULSE_3D` ve `STUDIO_SPLIT_LYRICS` eklendi.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 70] - Apple / TV Studio Split Lyrics Flow Preset & Visualizer Engine
+- **Kullanıcı Talebi & Referans Görsel (`fdfddfd.png`):**
+  - "Bu da ayrı bir preset. solda track bilgileri, ilerleme çubuğu vb yer alırken sağda ise akan şarkı sözleri olacak."
+- **Yapılan İyileştirmeler & Mimari Geliştirmeler:**
+  1. **Split-Screen Görselleştirici Motoru (`src/visualizers/StudioSplitLyricsVisualizer.ts`)**:
+     - **Sol Panel (Artwork & Player Deck)**:
+       - 3D Squircle köşe yumuşatmalı albüm kapağı, bas frekanslarıyla nefes alan dinamik büyüme (`pulseScale`) ve cam parlaması.
+       - Parça Adı, Sanatçı Adı ve `FLAC` / `LOSSLESS` stüdyo kalite rozeti.
+       - Zaman sayaçları (`0:54` / `3:44`), akıcı ilerleme çizgisi (scrubber) ve merkezde parlayan Apple/Spotify stili Pause/Play hap butonu.
+       - Üst sol kontrol ikonları (Kapat, Mikrofon/Karaoke, EQ Spektrum, Odak Gözü).
+     - **Sağ Panel (Apple Music / Spotify TV Stili Akan Şarkı Sözleri)**:
+       - Yaylı fizik tabanlı pürüzsüz dikey kaydırma (`currentScrollY += (target - current) * 0.085`).
+       - **Aktif Satır**: Büyük, kalın, parıltılı beyaz tipografi; kelime düzeyinde zamanlama varsa (BetterLyrics / Suno Aligned) yumuşak dolum (`word sweep`) ve bas vuruşlarında reaktif genleşme.
+       - **Pasif Satırlar**: Odak dışı kalan satırlarda derinlik hissi veren optik bulanıklık (`blur(2.5px)`) ve kademeli şeffaflık (`fade`).
+       - **Vokal Bekleme Noktaları (`•••`)**: Enstrümantal kısımlarda ritmik 3-nokta geri sayım göstergesi.
+       - **Dinamik Arka Plan**: Albüm kapağından otomatik renk çıkarımı (adaptive ambient glow) ve sıvı ışık nebulaları.
+  2. **Tip & Sistem Entegrasyonu**:
+     - `src/types.ts`: `'STUDIO_SPLIT_LYRICS'` eklendi.
+     - `src/core/Renderer.ts`: Lazy factory ve render pipeline entegrasyonu tamamlandı.
+     - `src/lib/visualizerCatalog.ts`: MINIMAL RELEASE kategorisine eklendi.
+     - `src/services/presetService.ts` & `src/lib/creatorTemplatesData.ts`: `APPLE / TV SPLIT LYRICS FLOW` hazır ayarı ve şablonu eklendi.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 69] - Cover Pulse 3D: 3D Album Cover Visualizer, Auto-Palette Extraction & Flanking EQ
+- **Kullanıcı Talebi & Referans Görseller:**
+  - "Cover Pulse 3D: Cover art'ını sahnenin merkezindeki 3D bir albüm kapağına dönüştürür. Kapak görselinin baskın rengi otomatik olarak çıkarılır ve tüm arka planın renk paletini belirler. Cover'ın iki yanında müziğin frekanslarına tepki veren EQ dalgaları ve ışık darbeleri hareket eder. Kapak sabit bir görsel gibi durmaz; hafif perspektif hareketleri, derinlik ve ışık tepkileriyle gerçek bir 3D obje hissi verir. Baslar, davullar ve yüksek frekanslar görselin farklı bölümlerinde farklı şiddette tepki oluşturur. Özellikle Spotify/YouTube release visual'ları için."
+- **Yapılan İyileştirmeler & Mimari Geliştirmeler:**
+  1. **3D Motoru & Görselleştirici (`src/visualizers/CoverPulse3DVisualizer.ts`)**:
+     - **Otomatik Kapak Renk Çıkarımı (`extractPaletteFromImage`)**: Yüklenen albüm kapağının piksellerini analiz ederek en canlı vokal/neon rengini (ör. macenta, neon mor, alev turuncusu, altın), tamamlayıcı ikincil rengi ve derin arka plan tonlarını otomatik çıkarır ve tüm sahneyi bu paletle aydınlatır.
+     - **Gerçek Zamanlı 3D Obje Projeksiyonu**: Perspektif dönüşüm matrisi, 3D yan omurga (`spine`) kalınlığı, şarkı adı gravürü, parlak jelatin / cam yansıması (`specular cellophane sheen`), Parental Advisory rozeti ve bas vuruşlarında ölçek genleşmesi.
+     - **Islak Zemin Yansıması & Cyber Pedestal**: 3D kapağın zemindeki ıslak yansıması, sese duyarlı çift neon dairesel podyum halkaları ve zemin ışık havuzu.
+     - **Yan Frekans EQ Dalgaları & Lazer Işık Huzmeleri**: Kapağın sol ve sağında logaritmik frekans barları, tepe noktası kapsülleri ve güçlü vuruşlarda yukarı doğru fırlayan dikey neon lazer huzmeleri.
+     - **3D Yüzen Kristal & Kor Parçacıkları (Depth-sorted Shards)**: Z-derinliğinde salınan elmas kırıkları ve ışık kıvılcımları.
+     - **Entegre Spotify / YouTube Player UI**: Zaman göstergeleri (`01:24` / `03:17`), neon gradient ilerleme çubuğu ve parlayan oynatma kontrolleri.
+  2. **Tip ve Katalog Entegrasyonu**:
+     - `src/types.ts`: `'COVER_PULSE_3D'` modu eklendi.
+     - `src/core/Renderer.ts`: Lazy factory ve hem istemci hem de sunucu tarafı render engine desteği sağlandı.
+     - `src/lib/visualizerCatalog.ts`: MINIMAL RELEASE kategorisine eklendi, granüler parametre desteği tanımlandı.
+     - `src/services/presetService.ts` & `src/lib/creatorTemplatesData.ts`: Küratörlü `COVER PULSE 3D (22NOIR RELEASE)` hazır ayarı eklendi.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 68] - Suno-Lyrics Community Best Practices Integration (xiliourt/Suno-Lyrics & Lumi-Script)
+- **Kullanıcı Talepleri & İnceleme:**
+  - "https://github.com/better-lyrics/better-lyrics şu projeyi baz alarak geliştir lyrics fonksiyonunu"
+  - "https://github.com/xiliourt/Suno-Lyrics ve https://github.com/Lumi-Script/Suno-Lyrics projelerini incele ve suno ile ilgili düzenlemeleri buna göre yap"
+- **Yapılan İyileştirmeler & Mimari Değişiklikler:**
+  1. **Çok Kaynaklı Suno Metadata & Hizalama (Aligned Lyrics) Endpoint Entegrasyonu (`server/routes/suno.ts`)**:
+     - `POST /api/suno/inspect`: `studio-api.prod.suno.com/api/clip/{id}`, `studio-api.prod.suno.com/api/feed/v2?ids={id}`, `studio-api.prod.suno.com/api/clip/{id}/aligned_lyrics/` ve sayfa scraping fallback'lerini kapsayan çoklu kaynak sorgulama motoru.
+     - `GET /api/suno/aligned-lyrics/:trackId`: Parça bazında kelime düzeyinde zamanlanmış vokal verisini doğrudan sunan endpoint.
+     - Ham Suno JSON API payload'larını doğrudan işleme desteği.
+  2. **Suno İçe Aktarma & Format Dönüştürme Motoru (`src/services/SunoImporterService.ts`)**:
+     - Suno v3, v3.5, v4 ve v5 varyasyonlarının tamamını (`word`, `token`, `text`, `start`, `start_s`, `begin`, `end`, `end_s`) destekleyen sözcük ve fonetik hizalama ayrıştırıcısı.
+     - Müzikal yapı belirteçlerini (`[Verse]`, `[Chorus]`, `(Guitar Solo)`, `(Pause - Single Kick)`) akıllı gruplama eşikleriyle (0.85s vokal nefes boşluğu, noktalama işaretleri) arındırıp doğal satırlara bölen kadans mekanizması.
+     - `xiliourt/Suno-Lyrics` standartlarında tek tıkla dışa aktarma fonksiyonları (`exportToLrc`, `exportToEnhancedLrc`, `exportToSrt`, `exportToVtt`, `exportToTtml`).
+  3. **Gelişmiş Suno AI & Altyazı Stüdyosu Arayüzü (`src/components/SunoImporter.tsx` & `src/components/LyricsStudio.tsx`)**:
+     - Link ile sorgulama modunun yanı sıra "HAM JSON / API PAYLOAD" sekmesi ile doğrudan JSON yapıştırma desteği.
+     - Önizleme ekranında tek tıkla `.LRC`, `.ELRC`, `.SRT`, `.VTT`, `.TTML` ve `.JSON` indirme aksiyonları.
+     - Kelime sayısı, vokal boşlukları ve senkronizasyon istatistiklerinin detaylı sunumu.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 67] - Comprehensive Structure Marker Removal, Preset Lyrics Fix & Weighted Cadence Auto-Sync
+- **Kullanıcı Talepleri & Problemler:**
+  1. "Suno'dan çekilen sözler için [] veya () gibi structure belirten veya komut belirten şarkı sözleriyle alakası olmayan yapıları çekme. (örn: `(Pause - Single Kick)` vb.)"
+  2. "Bazı presetlerde altyazılar gösterilmiyor."
+  3. "Otomatik senkronizasyon çalışmıyor verimli şekilde."
+- **Kök Nedenler & Çözümler:**
+  1. **Çok Kelimeli Müzik Komutları & Parantezli Yönergelerin Temizlenmesi**:
+     - `(Pause - Single Kick)`, `(Guitar Solo - Fast)`, `(Drop - Heavy 808)` gibi çok kelimeli veya tire/iki nokta içeren müzikal komutlar parantez içindeki kelime dağarcığına `pause`, `kick`, `snare`, `808`, `beat`, `switch`, `riff` vb. eklenerek ve çok kelimeli token buffer mimarisi ile `src/services/lyricSyncService.ts` ve `src/services/SunoImporterService.ts` üzerinde tamamen elendi.
+     - `LyricsStudio.tsx` içerisine **"YAPILARI ARINDIR"** butonu entegre edildi.
+  2. **Tüm Presetlerde ve Modlarda Altyazı/Lirik Renderının Sağlanması**:
+     - `src/core/Renderer.ts` dosyasında `drawLyricsLayer` çağrısı `drawOverlays` ana dağıtıcısının en üst katmanına taşındı ve `settings.mode !== 'KINETIC'` kısıtlaması kaldırılarak istisnasız tüm görselleştirici presetlerinde ve kart stillerinde (`NEON_FRAME`, `POLAROID`, `SPOTIFY`, `CD`, `HOLO_CD`, `TIKTOK`, `RETRO_TAPE`, `KINETIC` vb.) liriklerin kusursuz çizilmesi sağlandı.
+  3. **Hece, Kelime ve Karakter Ağırlıklı Akıllı Müzikal Kadans Senkronizasyon Motoru**:
+     - `autoSyncLyricsByDuration` metodunda eski eşit-aralıklı kaba dağıtım kaldırıldı; yerine hece tahmini (%40), kelime sayısı (%45) ve karakter uzunluğuna göre dinamik ağırlıklı, intro/outro payı bırakan ve nefes aralıkları tanıyan yapay zeka kalitesinde müzikal kadans motoru kuruldu.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`): %100 Başarılı.
+  - `compile_applet` (`npm run build`): %100 Başarılı.
+
+### [2026-08-20 - Oturum 66] - Suno Yapı/Komut Belirteçlerini ([Verse], (Solo) vb.) Söz Temizleme Motoru
+- **Kullanıcı Talebi:**
+  - "Suno'dan çekilen sözler için [] veya () gibi structure belirten veya komut belirten şarkı sözleriyle alakası olmayan yapıları çekme."
+- **Kök Neden & Analiz:**
+  - Suno AI promptları ve alignment verileri genellikle şarkı sözleri arasında `[Verse 1]`, `[Chorus]`, `[Guitar Solo]`, `[Drop]`, `(Guitar Solo)`, `(Instrumental)`, `(Fast tempo)`, `{Intro}`, `Verse 1:` gibi müzikal yapı/yönlendirme etiketleri içerir.
+  - Bu etiketler şarkıda seslendirilen gerçek sözler olmamasına rağmen, lirik senkronizasyonunda ve ekranda belirebiliyordu.
+- **Mimari & Uygulanan Çözümler:**
+  1. **Evrensel Yapı & Komut Filtreleme Motoru (`src/services/lyricSyncService.ts`)**:
+     - `isStructureMarkerToken(token: string)`: Köşeli parantez `[...]`, süslü parantez `{...}`, açılı parantez `<...>`, müzik komut parantezleri `(...)` (solo, tempo, drop, beat, vocal, guitar, instrumental vb.) ve başlık etiketlerini (`Verse 1:`, `Chorus:`) tek tek ayırt eden katı doğrulama.
+     - `cleanLyricsText(text: string)`: Şarkı sözü metinlerindeki tüm yapısal etiketleri, komutları ve gereksiz parantezleri temizleyip yalnızca gerçek şarkı sözü satırlarını döndüren arındırma motoru.
+     - `parseLrcText` ve `autoSyncLyricsByDuration` metodları bu filtrelemeyle güçlendirildi; yapı etiketleri zaman çizelgesine veya sözlere dahil edilmiyor.
+  2. **Suno İçe Aktarıcı Entegrasyonu (`src/services/SunoImporterService.ts`)**:
+     - `normalizeSunoData`: Çekilen prompt doğrudan filtrelenerek `lyrics` alanına aktarılıyor.
+     - `parseAlignmentAndLyrics`: Suno'dan gelen kelime bazlı timestamp (`alignmentData`) dizisinde `[Verse]`, `[Chorus]`, `(Solo)` gibi etiketler ve parantezler filtrelenerek lirik zaman çizelgesinden ve fonetik hizalamadan tamamen çıkarıldı.
+     - `groupWordsIntoLines`: Satırlara dönüştürülürken yapı belirteçleri atlandı ve temiz söz dizisi oluşturuldu.
+  3. **Lirik Stüdyosu Desteği (`src/components/LyricsStudio.tsx`)**:
+     - Manuel veya otomatik söz içe aktarma adımlarında temizleme motoru tetiklenerek kullanıcıya saf lirik akışı sağlandı.
+- **Derleme & Doğrulama:**
+  - `lint_applet` (`tsc --noEmit`) %100 başarılı ve sıfır hata.
+  - `compile_applet` (`npm run build`) başarıyla tamamlandı.
+
+### [2026-08-20 - Oturum 65] - Pro Lyrics Studio Ergonomic Card Redesign & Responsive Alignment
+- **Kullanıcı Talebi & Problem:**
+  - Adım Rehberi (Step Guide) veya dar yan panellerde Lirik Editörü satırlarının yatay olarak sıkışması, metin giriş kutusunun sıfır piksele daralması, -0.2 / +0.2 SN butonlarının satırlara bölünmesi ve taşma sorunu.
+- **Kök Neden:**
+  - `LyricsStudio.tsx` içerisindeki lirik düzenleme satırları tek bir katı yatay `flex-row` olarak tasarlanmıştı. 8 farklı kontrol kutusu (başlangıç, bitiş, nudge, aksiyon butonları) dar panel genişliklerinde (300-380px) şarkı sözü metin kutusunu eziyordu ve alt kaydırma çubuğu oluşturuyordu.
+- **Mimari & Uygulanan Çözümler:**
+  1. **Stüdyo Kartı Mimarisi (Responsive Lyric Studio Cards - `src/components/LyricsStudio.tsx`)**:
+     - Her şarkı sözü satırı DAW/CapCut kalitesinde 2 katmanlı ergonomik kart yapısına kavuşturuldu:
+       - **Üst Çubuk (Metadata & Controls)**: Sıra numarası rozeti (`#01`), Dinleme/Önizleme butonu, BŞL/BTM zaman girişleri, toplam süre rozeti (`2.4s`), mikro nudge butonları (`-0.1s`, `+0.1s`), Canlı Tap Hedef seçici, Kopyalama ve Silme butonları.
+       - **Alt Çubuk (Full-Width Text Area)**: Şarkı sözü metni için tam genişlikli, yüksek kontrastlı ve okunabilir metin giriş alanı (`w-full bg-zinc-950/80`).
+  2. **Global Zaman Öteleme Araç Çubuğu Optimizasyonu**:
+     - -0.5s / -0.2s / +0.2s / +0.5s hızlı öteleme hapları tek satırda esnek ve düzenli hizalandı; tuhaf satır kırılmaları önlendi.
+  3. **Adım Rehberi Entegrasyonu (`src/App.tsx`)**:
+     - Adım 5 içerisine "TAM EKRAN AÇ" butonu eklenerek kullanıcıların tek tıkla ana "Lirikler" sekmesine geçebilmesi sağlandı.
+     - `compact={true}` desteği ile yan panelde mükemmel uyum sağlandı.
+- **Derleme & Doğrulama Sonuçları:**
+  - `lint_applet` (`tsc --noEmit`) %100 başarılı ve yeşil.
+  - `compile_applet` (`npm run build`) başarıyla tamamlandı.
+
+### [2026-08-19 - Oturum 64] - Cinematic Preset Engine & Premium Card Redesign
+- **Kullanıcı Talebi & Hedef:**
+  - "Şarkı adı ve sanatçı adı yerleşim yerlerine özgürlük ver, sürükleyip yerlerini ayarlayabilelim, font/renk/büyüklük ayarı şahane olurdu." (Önceki oturumlarda tamamlandı)
+  - "Neden şuradaki gibi presetlerimiz yok da ... visualizerlerimiz var" -> Görsel kalitesi son derece yüksek, sinematik, Unsplash destekli 12 adet premium görselleştirici presetinin ve referans ekran görüntüsündeki modern grid tabanlı kart tasarımının hayata geçirilmesi.
+- **Mimari & Uygulanan Çözümler:**
+  1. **Kod Tabanı Derleme ve Sentaks Düzeltmesi (`src/lib/creatorTemplatesData.ts`)**:
+     - Önceki oturumda oluşan sentaks hatası (yorum satırı içine sıkışmış `export const MUSIC_GENRE_TEMPLATES` bildirimi) tespit edilerek düzeltildi, tüm derleyici hataları giderildi.
+  2. **Sinematik "Preset Seç" Modali Tasarımı (`src/components/TemplatePickerModal.tsx`)**:
+     - Kullanıcının referans ekran görüntüsündeki brutalist, cyberpunk estetikle birebir uyumlu, yüksek kontrastlı ve göze hitap eden bir hazır şablon grid'i oluşturuldu.
+     - **Kart Özellikleri**: `aspect-[16/10]` geniş ekran oranları, Unsplash sinematik arka planları, hover durumunda parlayan kehribar (amber-400) çizgiler, "NEW" ve "Pro" küçük parıldayan rozetler.
+     - **Sese Duyarlı Önizlemeler**: Kartların içine sese duyarlı dairesel auroralar, 3D tünel kafesleri veya spektrum çizgileri içeren mikro-animasyon katmanları çizilerek her presetin ruhu canlandırıldı.
+     - **Süzgeç Paneli**: Kullanıcının müzik tarzına göre hızlı tarama yapabilmesi için "TÜM PRESETLER", "DARK & BASS", "CYBER & TECHNO", "AMBIENT & CHILL" filtreleri yerleştirildi.
+     - **Show More Butonu**: Referans görseldeki "SHOW MORE" butonu entegre edilerek ilk açılışta 8 presetin, tıklandığında ise tüm 12 presetin gösterilmesi sağlandı.
+  3. **Arka Plan Duvar Kağıdı Senkronizasyonu (`src/App.tsx`)**:
+     - `handleApplyTemplate` fonksiyonu güncellenerek seçilen presetin sadece renk ve efekt ayarlarını değil, aynı zamanda yüksek çözünürlüklü sinematik duvar kağıdını (`bgImageUrl`) da otomatik olarak stüdyoya uygulayabilmesi sağlandı.
+  4. **Kategorik ve İsimsel Hizalama (`src/components/StudioTopBar.tsx`, `src/services/presetService.ts`)**:
+     - Üst bardaki "ŞABLONLAR" butonu, kullanıcı terminolojisine sadık kalınarak parıldayan bir ikon ile "PRESET SEÇ" olarak güncellendi.
+     - `src/services/presetService.ts` içerisindeki yerleşik profiller (`BUILTIN_PROFILES`) güncellenerek bu 12 premium presetle (Rebellion, Space, Digital Abyss, Forest, vb.) tam uyumlu hale getirildi.
+- **Derleme & Doğrulama Sonuçları:**
+  - `lint_applet` (`tsc --noEmit`) %100 başarılı ve yeşil.
+  - `compile_applet` (`npm run build`) ile derleme başarıyla tamamlandı.
 
 ### [2026-08-19 - Oturum 63] - Architecture & Codebase Refactoring: Complete Modularization & Monolith Decomposition
 - **Kullanıcı Talebi & Hedef:**

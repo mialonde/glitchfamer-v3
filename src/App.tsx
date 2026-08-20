@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { 
-  Sparkles, Video, Smartphone, Sliders, Type, Layers, Bookmark 
+  Sparkles, Video, Smartphone, Sliders, Type, Layers, Bookmark,
+  Compass, Check, ChevronRight, ChevronLeft, Upload, Wand2, Eye, Activity, ArrowUpRight
 } from "lucide-react";
 import { VisualizerCanvas, VisualizerHandle } from "./components/VisualizerCanvas";
 import { EffectsStudio } from "./components/EffectsStudio";
@@ -34,6 +35,8 @@ export default function App() {
   const [uiLayer, setUiLayer] = useState<UILayer>('QUICK_START');
   const [activeTab, setActiveTab] = useState<StudioTab>('visualizer');
   const [studioTabs, setStudioTabs] = useState<StudioTabConfig[]>(INITIAL_TABS);
+  const [stepGuideActive, setStepGuideActive] = useState(true);
+  const [currentStep, setCurrentStep] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -115,8 +118,8 @@ export default function App() {
     secondaryColor: '#FFFFFF',
     bgMode: 'GRID',
     bgOpacity: 0.06,
-    trackTitle: '',
-    artistName: '',
+    trackTitle: 'Demo Song',
+    artistName: 'Demo Singer',
     lyricsEnabled: true,
     lyricsStyle: 'KINETIC',
     lyricsPosition: 'BOTTOM',
@@ -224,6 +227,16 @@ export default function App() {
       });
     }
   }, []);
+
+  // Real-time metadata observer & event bus dispatch pattern
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('vidframer-metadata-update', {
+      detail: { 
+        artistName: settings.artistName, 
+        trackTitle: settings.trackTitle 
+      }
+    }));
+  }, [settings.artistName, settings.trackTitle]);
 
   // Project Import / Export JSON
   const exportProjectJson = () => {
@@ -544,9 +557,17 @@ export default function App() {
     setSettings((prev) => ({
       ...prev,
       ...tpl.settings,
+      // Şarkı adı ve sanatçı adını mevcut durumdan koru (preset üzerine yazmasın)
+      trackTitle: prev.trackTitle,
+      artistName: prev.artistName,
       primaryColor: tpl.settings.primaryColor || tpl.previewColors[0] || prev.primaryColor,
       secondaryColor: tpl.settings.secondaryColor || tpl.previewColors[1] || prev.secondaryColor,
+      bgImageUrl: tpl.bgImageUrl || tpl.settings.bgImageUrl || prev.bgImageUrl,
     }));
+    if (tpl.bgImageUrl) {
+      setBgImageUrl(tpl.bgImageUrl);
+      setBgImageFileBlob(null);
+    }
   };
 
   const removeAudio = () => {
@@ -916,6 +937,17 @@ export default function App() {
     );
   }
 
+  const steps = [
+    { id: 1, label: 'Preset', title: 'PRESET' },
+    { id: 2, label: 'Audio', title: 'AUDIO' },
+    { id: 3, label: 'Images', title: 'BACKDROP' },
+    { id: 4, label: 'Text', title: 'TEXT' },
+    { id: 5, label: 'Lyrics', title: 'LYRICS' },
+    { id: 6, label: 'Colors', title: 'COLORS' },
+    { id: 7, label: 'Elements', title: 'ELEMENTS' },
+    { id: 8, label: 'Export', title: 'EXPORT' }
+  ];
+
   return (
     <main className="h-screen w-screen bg-app text-content-primary flex flex-col overflow-hidden font-sans selection:bg-accent-muted selection:text-accent">
       
@@ -1126,153 +1158,683 @@ export default function App() {
         <aside className="w-full lg:w-[440px] xl:w-[500px] bg-panel flex flex-col border-t lg:border-t-0 lg:border-l border-border-subtle h-full overflow-hidden flex-1 lg:shrink-0 lg:flex-none min-w-0">
           
           {/* TAB BAR HEADER */}
-          <div className="border-b border-border-subtle bg-surface px-2 pt-2 flex items-center overflow-x-auto custom-scrollbar flex-shrink-0 gap-1">
-            <div className="flex items-center gap-1">
-              {studioTabs.filter(t => t.enabled !== false).map((tab) => {
-                const iconMap: Record<string, any> = {
-                  visualizer: Sliders,
-                  social: Smartphone,
-                  effects: Sparkles,
-                  lyrics: Type,
-                  media: Layers,
-                  presets: Bookmark,
-                  export: Video,
-                };
-                const Icon = iconMap[tab.id] || Sliders;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as StudioTab)}
-                    className={cn(
-                      "px-3 py-2 text-[10px] font-sans font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 transition-all cursor-pointer whitespace-nowrap",
-                      isActive
-                        ? "text-accent border-accent bg-white/[0.03]"
-                        : "text-content-secondary border-transparent hover:text-content-primary hover:bg-white/[0.02]"
-                    )}
-                  >
-                    <Icon size={13} className={isActive ? "text-accent" : "text-content-tertiary"} />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
+          <div className="border-b border-border-subtle bg-surface px-4 py-3 flex items-center justify-between flex-shrink-0 gap-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+              {stepGuideActive ? (
+                <div className="flex items-center gap-2">
+                  <Compass size={14} className="text-amber-400 animate-pulse" />
+                  <span className="text-[10px] font-sans font-black uppercase tracking-[0.1em] text-amber-300">
+                    ADIM REHBERİ (ACTIVE)
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  {studioTabs.filter(t => t.enabled !== false).map((tab) => {
+                    const iconMap: Record<string, any> = {
+                      visualizer: Sliders,
+                      social: Smartphone,
+                      effects: Sparkles,
+                      lyrics: Type,
+                      media: Layers,
+                      presets: Bookmark,
+                      export: Video,
+                    };
+                    const Icon = iconMap[tab.id] || Sliders;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as StudioTab)}
+                        className={cn(
+                          "px-2.5 py-1.5 text-[9.5px] font-sans font-bold uppercase tracking-wider flex items-center gap-1 border-b-2 transition-all cursor-pointer whitespace-nowrap",
+                          isActive
+                            ? "text-amber-400 border-amber-400 bg-white/[0.03]"
+                            : "text-content-secondary border-transparent hover:text-content-primary hover:bg-white/[0.02]"
+                        )}
+                      >
+                        <Icon size={12} className={isActive ? "text-amber-400" : "text-content-tertiary"} />
+                        <span>{tab.label.split(' ')[0]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
+            <label className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 flex-shrink-0 pl-2 border-l border-zinc-800">
+              <input 
+                type="checkbox" 
+                checked={stepGuideActive} 
+                onChange={(e) => setStepGuideActive(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-zinc-800 bg-zinc-900 text-amber-400 focus:ring-0 cursor-pointer"
+              />
+              <span className="text-[9px] font-sans font-black uppercase tracking-wider text-zinc-400">STEP GUIDE</span>
+            </label>
           </div>
 
           {/* TAB İÇERİĞİ (KAYDIRILABİLİR ALAN) */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-6">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
             
-            {/* TAB 1: VISUALIZER MODES, COLORS & ATMOSPHERE */}
-            {activeTab === 'visualizer' && (
-              <VisualizerTab
-                settings={settings}
-                onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
-                onFileUpload={(e, type) => handleFileUpload(e, type)}
-              />
-            )}
+            {stepGuideActive ? (
+              <div className="space-y-6 animate-in fade-in-50 duration-200">
+                
+                {/* WIZARD NAVIGATION HEAD */}
+                <div className="flex items-center justify-between border border-zinc-900 bg-zinc-950 px-4 py-3 rounded-lg shadow-sm">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                    {steps[currentStep - 1].title} Adımı ({currentStep}/{steps.length})
+                  </h3>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setCurrentStep(prev => Math.max(1, prev - 1))}
+                      disabled={currentStep === 1}
+                      className={cn(
+                        "text-[10px] font-sans font-black uppercase tracking-widest cursor-pointer transition-colors",
+                        currentStep === 1 ? "text-zinc-650 cursor-not-allowed" : "text-zinc-400 hover:text-white"
+                      )}
+                    >
+                      BACK
+                    </button>
+                    <button
+                      onClick={() => setCurrentStep(prev => Math.min(steps.length, prev + 1))}
+                      disabled={currentStep === steps.length}
+                      className={cn(
+                        "text-[10px] font-sans font-black uppercase tracking-widest cursor-pointer transition-colors",
+                        currentStep === steps.length ? "text-zinc-650 cursor-not-allowed" : "text-amber-400 hover:text-amber-300"
+                      )}
+                    >
+                      NEXT
+                    </button>
+                  </div>
+                </div>
 
-            {/* TAB 2: SOCIAL MEDIA & TIKTOK FORMAT ENGINE */}
-            {activeTab === 'social' && (
-              <div className="space-y-6 animate-in fade-in-50 duration-150">
-                <SocialMediaStudio
-                  settings={settings}
-                  currentTime={currentTime}
-                  audioDuration={duration || 120}
-                  onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
-                  onSeek={seekRelative}
-                  onSelectWallpaper={selectCuratedWallpaper}
-                  onSelectEuphoricVideo={selectEuphoricVideo}
-                />
+                {/* VERTICAL STEPS CONTAINER */}
+                <div className="relative pl-6 border-l border-zinc-900 ml-3 py-1 space-y-5">
+                  {steps.map((st) => {
+                    const isStepActive = currentStep === st.id;
+                    const isStepCompleted = currentStep > st.id;
+                    
+                    return (
+                      <div key={st.id} className="relative">
+                        
+                        {/* STEP BULLET NODE */}
+                        <div 
+                          onClick={() => setCurrentStep(st.id)}
+                          className={cn(
+                            "absolute -left-[35px] top-0.5 w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-sans font-black cursor-pointer transition-all",
+                            isStepActive 
+                              ? "bg-amber-400 text-black border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.2)] scale-110" 
+                              : isStepCompleted
+                                ? "bg-zinc-900 text-zinc-300 border-zinc-800"
+                                : "bg-zinc-950 text-zinc-600 border-zinc-900 hover:border-zinc-850 hover:text-zinc-500"
+                          )}
+                        >
+                          {isStepCompleted ? <Check size={10} strokeWidth={4} /> : st.id}
+                        </div>
+
+                        {/* STEP HEADER LABEL */}
+                        <div 
+                          onClick={() => setCurrentStep(st.id)}
+                          className={cn(
+                            "text-xs font-sans font-black uppercase tracking-wider cursor-pointer select-none transition-colors",
+                            isStepActive 
+                              ? "text-white" 
+                              : isStepCompleted
+                                ? "text-zinc-400 hover:text-zinc-300"
+                                : "text-zinc-600 hover:text-zinc-500"
+                          )}
+                        >
+                          {st.label}
+                        </div>
+
+                        {/* STEP EXPANDED INNER CONTROLS CARD */}
+                        {isStepActive && (
+                          <div className="bg-zinc-950/80 border border-zinc-900/50 p-4 rounded-lg mt-3 space-y-4 shadow-inner animate-in slide-in-from-top-2 duration-150">
+                            {st.id === 1 && (
+                              <div className="space-y-3">
+                                <span className="text-[10px] text-zinc-500 block uppercase tracking-wide font-semibold">Giriş & Şablon</span>
+                                <button
+                                  onClick={() => setIsTemplateModalOpen(true)}
+                                  className="w-full py-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-white font-sans font-black tracking-widest text-[10px] rounded flex items-center justify-center gap-2 cursor-pointer transition-all uppercase"
+                                >
+                                  <Sparkles size={12} className="text-amber-400 animate-pulse" />
+                                  SELECT PRESET
+                                </button>
+                                <p className="text-[10px] text-zinc-500 leading-normal">
+                                  Sinematik 12 elite hazır ayardan birini seçerek tüm renk, video ve equalizer modlarını tek tıkla otomatik olarak yükleyin.
+                                </p>
+                              </div>
+                            )}
+
+                            {st.id === 2 && (
+                              <div className="space-y-4">
+                                <span className="text-[10px] text-zinc-500 block uppercase tracking-wide font-semibold">Ses Dosyası Seçimi</span>
+                                
+                                <div className="space-y-2">
+                                  <label className="block p-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded text-center cursor-pointer transition-all">
+                                    <input 
+                                      type="file" 
+                                      accept="audio/*" 
+                                      onChange={(e) => handleFileUpload(e, 'AUDIO')} 
+                                      className="hidden" 
+                                    />
+                                    <Upload size={14} className="mx-auto text-zinc-400 mb-1" />
+                                    <span className="text-[10px] font-sans font-black tracking-wider text-zinc-300 block uppercase">
+                                      {audioFileName ? 'DOSYAYI DEĞİŞTİR' : 'AUDIO DOSYASI YÜKLE'}
+                                    </span>
+                                  </label>
+                                  {audioFileName && (
+                                    <div className="text-[10px] text-zinc-400 truncate bg-zinc-900/30 px-2 py-1 rounded">
+                                      {audioFileName}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                                    <span className="uppercase font-semibold">Parça Başlangıç Saniyesi</span>
+                                    <span className="font-mono text-amber-400">{settings.trimStart || 0}s</span>
+                                  </div>
+                                  <input 
+                                    type="range" 
+                                    min={0} 
+                                    max={duration || 180} 
+                                    value={settings.trimStart || 0} 
+                                    onChange={(e) => setSettings(s => ({ ...s, trimStart: parseInt(e.target.value), trimEnabled: true }))}
+                                    className="w-full accent-amber-400 cursor-pointer h-1 bg-zinc-850 rounded-lg appearance-none"
+                                  />
+                                </div>
+
+                                <button
+                                  onClick={togglePlay}
+                                  className="w-full py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-[10px] font-sans font-black tracking-widest rounded flex items-center justify-center gap-1.5 cursor-pointer uppercase"
+                                >
+                                  {isPlaying ? 'MÜZİĞİ DURDUR' : 'MÜZİĞİ OYNAT'}
+                                </button>
+                              </div>
+                            )}
+
+                            {st.id === 3 && (
+                              <div className="space-y-4">
+                                <span className="text-[10px] text-zinc-500 block uppercase tracking-wide font-semibold">Görseller & Arka Plan</span>
+                                
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="p-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded text-center cursor-pointer transition-all flex flex-col justify-center items-center h-[64px]">
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={(e) => handleFileUpload(e, 'COVER')} 
+                                        className="hidden" 
+                                      />
+                                      <span className="text-[9px] font-sans font-black tracking-widest text-zinc-300 block uppercase">KAPAK (SQUARE)</span>
+                                      <span className="text-[8px] text-zinc-500 block truncate mt-0.5">{coverUrl ? '✓ Yüklendi' : 'Seçilmedi'}</span>
+                                    </label>
+                                    {coverUrl && (
+                                      <button 
+                                        onClick={removeCover}
+                                        className="py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/50 text-red-400 text-[8px] font-sans font-bold uppercase tracking-wider rounded transition-all cursor-pointer text-center"
+                                      >
+                                        🗑️ Kapağı Sil
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="p-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded text-center cursor-pointer transition-all flex flex-col justify-center items-center h-[64px]">
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={(e) => handleFileUpload(e, 'LOGO')} 
+                                        className="hidden" 
+                                      />
+                                      <span className="text-[9px] font-sans font-black tracking-widest text-zinc-300 block uppercase">LOGO / FLAMA</span>
+                                      <span className="text-[8px] text-zinc-500 block truncate mt-0.5">{logoUrl ? '✓ Yüklendi' : 'Seçilmedi'}</span>
+                                    </label>
+                                    {logoUrl && (
+                                      <button 
+                                        onClick={removeLogo}
+                                        className="py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/50 text-red-400 text-[8px] font-sans font-bold uppercase tracking-wider rounded transition-all cursor-pointer text-center"
+                                      >
+                                        🗑️ Logoyu Sil
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="p-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded text-center cursor-pointer transition-all flex flex-col justify-center items-center h-[64px]">
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={(e) => handleFileUpload(e, 'BG_IMAGE')} 
+                                        className="hidden" 
+                                      />
+                                      <span className="text-[9px] font-sans font-black tracking-widest text-zinc-300 block uppercase">ÖZEL RESİM</span>
+                                      <span className="text-[8px] text-zinc-500 block truncate mt-0.5">{bgImageUrl ? '✓ Yüklendi' : 'Seçilmedi'}</span>
+                                    </label>
+                                    {bgImageUrl && (
+                                      <button 
+                                        onClick={removeBackgroundImage}
+                                        className="py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/50 text-red-400 text-[8px] font-sans font-bold uppercase tracking-wider rounded transition-all cursor-pointer text-center"
+                                      >
+                                        🗑️ Resmi Sil
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="p-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded text-center cursor-pointer transition-all flex flex-col justify-center items-center h-[64px]">
+                                      <input 
+                                        type="file" 
+                                        accept="video/*" 
+                                        onChange={(e) => handleFileUpload(e, 'VIDEO')} 
+                                        className="hidden" 
+                                      />
+                                      <span className="text-[9px] font-sans font-black tracking-widest text-zinc-300 block uppercase">ÖZEL VİDEO</span>
+                                      <span className="text-[8px] text-zinc-500 block truncate mt-0.5">{bgVideoUrl ? '✓ Yüklendi' : 'Seçilmedi'}</span>
+                                    </label>
+                                    {bgVideoUrl && (
+                                      <button 
+                                        onClick={removeBackgroundVideo}
+                                        className="py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/50 text-red-400 text-[8px] font-sans font-bold uppercase tracking-wider rounded transition-all cursor-pointer text-center"
+                                      >
+                                        🗑️ Videoyu Sil
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {st.id === 4 && (
+                              <div className="space-y-3">
+                                <span className="text-[10px] text-zinc-500 block uppercase tracking-wide font-semibold">Yazılar & Metinler</span>
+                                
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-zinc-500 font-sans uppercase font-bold tracking-wider">Şarkı Adı</label>
+                                  <input 
+                                    type="text" 
+                                    value={settings.trackTitle || ''} 
+                                    onChange={(e) => setSettings(s => ({ ...s, trackTitle: e.target.value }))}
+                                    placeholder="Şarkı adı yazın..."
+                                    className="w-full bg-zinc-900 border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-400 font-sans"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-zinc-500 font-sans uppercase font-bold tracking-wider">Sanatçı Adı</label>
+                                  <input 
+                                    type="text" 
+                                    value={settings.artistName || ''} 
+                                    onChange={(e) => setSettings(s => ({ ...s, artistName: e.target.value }))}
+                                    placeholder="Sanatçı adı yazın..."
+                                    className="w-full bg-zinc-900 border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-400 font-sans"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-[9px] text-zinc-500">
+                                    <span className="uppercase font-bold tracking-wider">Metin Boyutu</span>
+                                    <span className="font-mono text-zinc-300">{settings.lyricsFontSize || 42}px</span>
+                                  </div>
+                                  <input 
+                                    type="range" 
+                                    min={16} 
+                                    max={90} 
+                                    value={settings.lyricsFontSize || 42} 
+                                    onChange={(e) => setSettings(s => ({ ...s, lyricsFontSize: parseInt(e.target.value) }))}
+                                    className="w-full accent-amber-400 cursor-pointer h-1 bg-zinc-850 rounded-lg appearance-none"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {st.id === 5 && (
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] text-zinc-400 block uppercase tracking-wide font-bold">Gelişmiş Lirik & Tipografi Editörü</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveTab('lyrics')}
+                                    className="px-2.5 py-1 bg-amber-400/20 hover:bg-amber-400 hover:text-black border border-amber-400/40 text-amber-400 text-[9px] font-black uppercase rounded transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                  >
+                                    <span>TAM EKRAN AÇ</span>
+                                    <ArrowUpRight size={11} />
+                                  </button>
+                                </div>
+                                <p className="text-[10px] text-zinc-500 leading-normal">
+                                  Buradan şarkı sözlerinizin zamanlamalarını satır satır kaydırabilir, Suno'dan çekilen fonetik lirikleri ve mikro gecikmeleri anlık olarak düzeltebilirsiniz.
+                                </p>
+                                <div className="border border-zinc-800 bg-zinc-950/60 p-2 rounded-lg max-h-[500px] overflow-y-auto custom-scrollbar">
+                                  <LyricsStudio
+                                    settings={settings}
+                                    currentTime={currentTime}
+                                    duration={duration || 120}
+                                    isPlaying={isPlaying}
+                                    onTogglePlay={togglePlay}
+                                    onChange={(updated) => setSettings(s => ({ ...s, ...updated }))}
+                                    onSeek={(t) => {
+                                      if (audioRef.current) audioRef.current.currentTime = t;
+                                      setCurrentTime(t);
+                                    }}
+                                    compact={true}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {st.id === 6 && (
+                              <div className="space-y-3">
+                                <span className="text-[10px] text-zinc-500 block uppercase tracking-wide font-semibold">Renk Teması</span>
+                                
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    <label className="text-[8px] text-zinc-500 uppercase block font-bold">Birincil Renk</label>
+                                    <div className="flex gap-1.5">
+                                      <input 
+                                        type="color" 
+                                        value={settings.primaryColor || '#FF003C'} 
+                                        onChange={(e) => setSettings(s => ({ ...s, primaryColor: e.target.value }))}
+                                        className="w-7 h-7 rounded border-0 bg-transparent cursor-pointer"
+                                      />
+                                      <input 
+                                        type="text" 
+                                        value={settings.primaryColor || '#FF003C'} 
+                                        onChange={(e) => setSettings(s => ({ ...s, primaryColor: e.target.value }))}
+                                        className="bg-zinc-900 border border-zinc-850 rounded text-[10px] text-zinc-200 px-1.5 w-full uppercase focus:outline-none font-mono"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-[8px] text-zinc-500 uppercase block font-bold">İkincil Renk</label>
+                                    <div className="flex gap-1.5">
+                                      <input 
+                                        type="color" 
+                                        value={settings.secondaryColor || '#00FFFF'} 
+                                        onChange={(e) => setSettings(s => ({ ...s, secondaryColor: e.target.value }))}
+                                        className="w-7 h-7 rounded border-0 bg-transparent cursor-pointer"
+                                      />
+                                      <input 
+                                        type="text" 
+                                        value={settings.secondaryColor || '#00FFFF'} 
+                                        onChange={(e) => setSettings(s => ({ ...s, secondaryColor: e.target.value }))}
+                                        className="bg-zinc-900 border border-zinc-850 rounded text-[10px] text-zinc-200 px-1.5 w-full uppercase focus:outline-none font-mono"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-zinc-900 flex items-center justify-between gap-1 flex-wrap">
+                                  {[
+                                    { p: '#FF003C', s: '#00FFFF', label: 'Cyber' },
+                                    { p: '#FFD700', s: '#FFFFFF', label: 'Gold' },
+                                    { p: '#39FF14', s: '#111111', label: 'Acid' },
+                                    { p: '#BD00FF', s: '#00F0FF', label: 'Space' }
+                                  ].map((cp, idx) => (
+                                    <button 
+                                      key={idx}
+                                      onClick={() => setSettings(s => ({ ...s, primaryColor: cp.p, secondaryColor: cp.s }))}
+                                      className="px-2 py-1 text-[8px] font-sans font-black tracking-widest bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 hover:border-zinc-800 text-zinc-400 hover:text-white rounded transition-colors uppercase cursor-pointer"
+                                    >
+                                      {cp.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {st.id === 7 && (
+                              <div className="space-y-3">
+                                <span className="text-[10px] text-zinc-500 block uppercase tracking-wide font-semibold">Equalizer & FX Ayarı</span>
+                                
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                                    <span className="uppercase font-bold">Equalizer Hassasiyeti</span>
+                                    <span className="font-mono text-amber-400">{settings.intensity || 1.0}x</span>
+                                  </div>
+                                  <input 
+                                    type="range" 
+                                    min={0.2} 
+                                    max={2.5} 
+                                    step={0.05}
+                                    value={settings.intensity || 1.0} 
+                                    onChange={(e) => setSettings(s => ({ ...s, intensity: parseFloat(e.target.value) }))}
+                                    className="w-full accent-amber-400 cursor-pointer h-1 bg-zinc-850 rounded-lg appearance-none"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                                    <span className="uppercase font-bold">Ekran Sarsıntısı (Shake)</span>
+                                    <span className="font-mono text-amber-400">{settings.cameraShake || 0.0}</span>
+                                  </div>
+                                  <input 
+                                    type="range" 
+                                    min={0.0} 
+                                    max={1.0} 
+                                    step={0.05}
+                                    value={settings.cameraShake || 0.0} 
+                                    onChange={(e) => setSettings(s => ({ ...s, cameraShake: parseFloat(e.target.value), cameraShakeEnabled: parseFloat(e.target.value) > 0 }))}
+                                    className="w-full accent-amber-400 cursor-pointer h-1 bg-zinc-850 rounded-lg appearance-none"
+                                  />
+                                </div>
+
+                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-900">
+                                  <label className="flex items-center gap-1.5 cursor-pointer">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={settings.bloomEnabled !== false} 
+                                      onChange={(e) => setSettings(s => ({ ...s, bloomEnabled: e.target.checked }))}
+                                      className="w-3.5 h-3.5 rounded border-zinc-800 bg-zinc-900 text-amber-400 focus:ring-0 cursor-pointer"
+                                    />
+                                    <span className="text-[8px] font-sans font-black tracking-widest text-zinc-400 uppercase">BLOOM PARLAMA</span>
+                                  </label>
+
+                                  <label className="flex items-center gap-1.5 cursor-pointer">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={settings.rgbSplitEnabled} 
+                                      onChange={(e) => setSettings(s => ({ ...s, rgbSplitEnabled: e.target.checked, rgbSplit: e.target.checked ? 0.35 : 0 }))}
+                                      className="w-3.5 h-3.5 rounded border-zinc-800 bg-zinc-900 text-amber-400 focus:ring-0 cursor-pointer"
+                                    />
+                                    <span className="text-[8px] font-sans font-black tracking-widest text-zinc-400 uppercase">GLITCH RGB</span>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+
+                            {st.id === 8 && (
+                              <div className="space-y-4">
+                                <span className="text-[10px] text-zinc-500 block uppercase tracking-wide font-semibold">Video Çıktısı</span>
+                                
+                                <div className="space-y-1">
+                                  <label className="text-[8px] text-zinc-500 font-sans uppercase font-black tracking-widest">En-Boy Oranı</label>
+                                  <div className="grid grid-cols-2 gap-1">
+                                    {[
+                                      { id: '16/9', label: '16/9 YATAY' },
+                                      { id: '9/16', label: '9/16 VERTICAL' }
+                                    ].map(ratio => (
+                                      <button
+                                        key={ratio.id}
+                                        onClick={() => setSettings(s => ({ ...s, aspectRatio: ratio.id }))}
+                                        className={cn(
+                                          "py-2 text-[8px] font-sans font-black tracking-widest border rounded transition-all cursor-pointer uppercase",
+                                          settings.aspectRatio === ratio.id 
+                                            ? "bg-amber-400 text-black border-amber-400 font-black" 
+                                            : "bg-zinc-900 border-zinc-850 text-zinc-400 hover:text-white"
+                                        )}
+                                      >
+                                        {ratio.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => {
+                                    setStepGuideActive(false);
+                                    setActiveTab('export');
+                                  }}
+                                  className="w-full py-3 bg-gradient-to-r from-red-600 to-amber-500 hover:opacity-90 text-white font-sans font-black tracking-widest text-[10px] rounded flex items-center justify-center gap-2 cursor-pointer transition-all uppercase shadow-[0_0_15px_rgba(239,68,68,0.2)] animate-pulse"
+                                >
+                                  <Video size={12} />
+                                  60 FPS MP4 RENDER BAŞLAT
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* DASHED STEPS CONNECTOR */}
+                        {st.id < steps.length && (
+                          <div className="absolute left-[-24px] top-6 w-[1px] h-4 border-l border-dashed border-zinc-900" />
+                        )}
+
+                      </div>
+                    );
+                  })}
+                </div>
+
               </div>
-            )}
+            ) : (
+              <div className="space-y-6">
+                {/* TAB 1: VISUALIZER MODES, COLORS & ATMOSPHERE */}
+                {activeTab === 'visualizer' && (
+                  <VisualizerTab
+                    settings={settings}
+                    onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
+                    onFileUpload={(e, type) => handleFileUpload(e, type)}
+                  />
+                )}
 
-            {/* TAB 3: SHADER FX & MASTERING SUITE */}
-            {activeTab === 'effects' && (
-              <div className="space-y-6 animate-in fade-in-50 duration-150">
-                <EffectsStudio 
-                  settings={settings} 
-                  onChange={(newSettings) => setSettings(s => ({ ...s, ...newSettings }))}
-                />
+                {/* TAB 2: SOCIAL MEDIA & TIKTOK FORMAT ENGINE */}
+                {activeTab === 'social' && (
+                  <div className="space-y-6 animate-in fade-in-50 duration-150">
+                    <SocialMediaStudio
+                      settings={settings}
+                      coverUrl={coverUrl}
+                      onCoverChange={(url) => {
+                        if (coverUrl && coverUrl.startsWith('blob:')) URL.revokeObjectURL(coverUrl);
+                        setCoverUrl(url);
+                        setCoverFileBlob(null);
+                      }}
+                      bgVideoUrl={bgVideoUrl}
+                      onBgVideoChange={(url) => {
+                        if (bgVideoUrl && bgVideoUrl.startsWith('blob:')) URL.revokeObjectURL(bgVideoUrl);
+                        setBgVideoUrl(url);
+                        setSettings(s => ({ ...s, bgVideoUrl: url || undefined }));
+                      }}
+                      bgImageUrl={bgImageUrl}
+                      onBgImageChange={(url) => {
+                        if (bgImageUrl && bgImageUrl.startsWith('blob:')) URL.revokeObjectURL(bgImageUrl);
+                        setBgImageUrl(url);
+                        setBgImageFileBlob(null);
+                        setSettings(s => ({ ...s, bgImageUrl: url || undefined }));
+                      }}
+                      currentTime={currentTime}
+                      duration={duration || 120}
+                      isPlaying={isPlaying}
+                      onTogglePlay={togglePlay}
+                      onPlayTrimStart={() => {
+                        if (audioRef.current) audioRef.current.currentTime = settings.trimStart || 0;
+                        if (!isPlaying) togglePlay();
+                      }}
+                      onChange={(updated) => setSettings(s => ({ ...s, ...updated }))}
+                    />
+                  </div>
+                )}
+
+                {/* TAB 3: SHADER FX & MASTERING SUITE */}
+                {activeTab === 'effects' && (
+                  <div className="space-y-6 animate-in fade-in-50 duration-150">
+                    <EffectsStudio 
+                      settings={settings} 
+                      onChange={(newSettings) => setSettings(s => ({ ...s, ...newSettings }))}
+                    />
+                  </div>
+                )}
+
+                {/* TAB 4: ADVANCED AI LYRICS STUDIO */}
+                {activeTab === 'lyrics' && (
+                  <div className="space-y-6 animate-in fade-in-50 duration-150">
+                    <LyricsStudio
+                      settings={settings}
+                      currentTime={currentTime}
+                      duration={duration || 120}
+                      isPlaying={isPlaying}
+                      onTogglePlay={togglePlay}
+                      onChange={(updated) => setSettings(s => ({ ...s, ...updated }))}
+                      onSeek={(t) => {
+                        if (audioRef.current) audioRef.current.currentTime = t;
+                        setCurrentTime(t);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* TAB 5: MEDIA ASSETS & METADATA */}
+                {activeTab === 'media' && (
+                  <MediaTab
+                    settings={settings}
+                    audioUrl={audioUrl}
+                    audioFileName={audioFileName}
+                    coverArtUrl={coverUrl}
+                    logoUrl={logoUrl}
+                    bgImageUrl={bgImageUrl}
+                    bgVideoUrl={bgVideoUrl}
+                    onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
+                    onFileUpload={handleFileUpload}
+                    onOpenSunoModal={() => setIsSunoModalOpen(true)}
+                    onLoadDemoTrack={loadDemoTrack}
+                    onRemoveAudio={removeAudio}
+                    onRemoveCoverArt={removeCover}
+                    onRemoveLogo={removeLogo}
+                    onRemoveBackgroundImage={removeBackgroundImage}
+                    onRemoveBackgroundVideo={removeBackgroundVideo}
+                    onSelectWallpaper={selectCuratedWallpaper}
+                    onSelectEuphoricVideo={selectEuphoricVideo}
+                  />
+                )}
+
+                {/* TAB 6: PRESET & PROFILE MANAGER */}
+                {activeTab === 'presets' && (
+                  <div className="animate-in fade-in-50 duration-150">
+                    <PresetManager 
+                      currentSettings={settings}
+                      onApplySettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
+                    />
+                  </div>
+                )}
+
+                {/* TAB 7: EXPORT & 60 FPS RENDER ENGINE */}
+                {activeTab === 'export' && (
+                  <ExportTab
+                    settings={settings}
+                    audioUrl={audioUrl}
+                    renderEngine={renderEngine}
+                    serverQuality={serverQuality}
+                    isServerRendering={isServerRendering}
+                    serverProgress={serverProgress}
+                    serverStage={serverStage}
+                    serverError={serverError}
+                    serverVideoUrl={serverVideoUrl}
+                    isRecording={isRecording}
+                    videoResultUrl={videoResultUrl}
+                    isConvertingMp4={isConvertingMp4}
+                    onSetRenderEngine={setRenderEngine}
+                    onSetServerQuality={setServerQuality}
+                    onStartServerRender={startServerRender}
+                    onCancelServerRender={cancelServerRender}
+                    onClearServerError={() => setServerError(null)}
+                    onStartClientRender={startClientRender}
+                    onConvertWebMtoMp4={convertWebMtoMp4}
+                    onResetServerVideoUrl={() => setServerVideoUrl(null)}
+                    onResetClientVideoUrl={() => setVideoResultUrl(null)}
+                  />
+                )}
               </div>
-            )}
-
-            {/* TAB 4: ADVANCED AI LYRICS STUDIO */}
-            {activeTab === 'lyrics' && (
-              <div className="space-y-6 animate-in fade-in-50 duration-150">
-                <LyricsStudio
-                  settings={settings}
-                  currentTime={currentTime}
-                  audioBlob={audioFileBlob}
-                  audioUrl={audioUrl}
-                  audioDuration={duration}
-                  onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
-                  onSeek={(time) => {
-                    if (audioRef.current) audioRef.current.currentTime = time;
-                    setCurrentTime(time);
-                  }}
-                />
-              </div>
-            )}
-
-            {/* TAB 5: MEDIA ASSETS & METADATA */}
-            {activeTab === 'media' && (
-              <MediaTab
-                settings={settings}
-                audioUrl={audioUrl}
-                audioFileName={audioFileName}
-                coverArtUrl={coverUrl}
-                logoUrl={logoUrl}
-                bgImageUrl={bgImageUrl}
-                bgVideoUrl={bgVideoUrl}
-                onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
-                onFileUpload={handleFileUpload}
-                onOpenSunoModal={() => setIsSunoModalOpen(true)}
-                onLoadDemoTrack={loadDemoTrack}
-                onRemoveAudio={removeAudio}
-                onRemoveCoverArt={removeCover}
-                onRemoveLogo={removeLogo}
-                onRemoveBackgroundImage={removeBackgroundImage}
-                onRemoveBackgroundVideo={removeBackgroundVideo}
-                onSelectWallpaper={selectCuratedWallpaper}
-                onSelectEuphoricVideo={selectEuphoricVideo}
-              />
-            )}
-
-            {/* TAB 6: PRESET & PROFILE MANAGER */}
-            {activeTab === 'presets' && (
-              <div className="animate-in fade-in-50 duration-150">
-                <PresetManager 
-                  currentSettings={settings}
-                  onApplySettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
-                />
-              </div>
-            )}
-
-            {/* TAB 7: EXPORT & 60 FPS RENDER ENGINE */}
-            {activeTab === 'export' && (
-              <ExportTab
-                settings={settings}
-                audioUrl={audioUrl}
-                renderEngine={renderEngine}
-                serverQuality={serverQuality}
-                isServerRendering={isServerRendering}
-                serverProgress={serverProgress}
-                serverStage={serverStage}
-                serverError={serverError}
-                serverVideoUrl={serverVideoUrl}
-                isRecording={isRecording}
-                videoResultUrl={videoResultUrl}
-                isConvertingMp4={isConvertingMp4}
-                onSetRenderEngine={setRenderEngine}
-                onSetServerQuality={setServerQuality}
-                onStartServerRender={startServerRender}
-                onCancelServerRender={cancelServerRender}
-                onClearServerError={() => setServerError(null)}
-                onStartClientRender={startClientRender}
-                onConvertWebMtoMp4={convertWebMtoMp4}
-                onResetServerVideoUrl={() => setServerVideoUrl(null)}
-                onResetClientVideoUrl={() => setVideoResultUrl(null)}
-              />
             )}
 
           </div>

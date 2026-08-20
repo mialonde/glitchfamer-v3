@@ -15,6 +15,8 @@ export interface MusicMetadata {
 
 export type VisualizerMode = 
   | 'NONE'
+  | 'COVER_PULSE_3D'
+  | 'STUDIO_SPLIT_LYRICS'
   | 'NOIR_CORE'
   | 'NEURAL_BLOOM'
   | 'DREAM_PERFORMER'
@@ -90,6 +92,9 @@ export interface SyncedLine {
   endTime: number;
   text: string;
   words?: SyncedWord[];
+  translation?: string;
+  romanization?: string;
+  singer?: string;
 }
 
 export interface SunoTimelineWord {
@@ -137,8 +142,8 @@ export interface NormalizedSunoTrack {
   source: 'suno';
 }
 
-export type LyricsStyle = 'KINETIC' | 'KARAOKE' | 'SUBTITLE' | 'NEON_BOX' | 'CYBER_GLITCH';
-export type LyricsPosition = 'TOP' | 'CENTER' | 'BOTTOM';
+export type LyricsStyle = 'KINETIC' | 'APPLE_SCROLL' | 'KARAOKE' | 'BETTER_FLOW' | 'SUBTITLE' | 'NEON_BOX' | 'CYBER_GLITCH' | 'MINIMAL';
+export type LyricsPosition = 'TOP' | 'CENTER' | 'BOTTOM' | 'CUSTOM';
 
 export interface VisualizerSettings {
   mode: VisualizerMode;
@@ -236,6 +241,24 @@ export interface VisualizerSettings {
   lyricsFontSize: number;
   lyricsColor: string;
   syncedLyrics: SyncedLine[];
+  lyricsY?: number;                  // Dikey konum (% 5 - 95, varsayılan 88)
+  lyricsX?: number;                  // Yatay konum (% 5 - 95, varsayılan 50)
+  lyricsAlign?: 'left' | 'center' | 'right';
+  lyricsFontFamily?: string;         // Font ailesi ('Space Grotesk', 'Syne', 'Outfit', 'Inter', vb.)
+  lyricsFontWeight?: 'normal' | 'bold' | '900';
+  lyricsLetterSpacing?: number;      // Harf aralığı
+  lyricsGlow?: number;               // Işıma şiddeti (0 - 50)
+  lyricsBeatReactive?: boolean;      // Ritme göre büyüme/titreşim
+  lyricsBeatScale?: number;          // Ritim büyüme çarpanı (0.0 - 2.0)
+  lyricsInactiveOpacity?: number;    // Pasif/önceki satır şeffaflığı (0.1 - 0.8)
+  lyricsLineCount?: 1 | 2 | 3 | 5;   // Kaydırma modunda gösterilecek satır sayısı
+  lyricsHighlightColor?: string;     // Aktif kelime / vurgu rengi (BetterLyrics)
+  lyricsBlurInactive?: boolean;      // Pasif satırlara derinlik bulanıklığı (BetterLyrics)
+  lyricsShowVocalGapDots?: boolean;  // Enstrümantal aralarda nefes sayacı ••• (BetterLyrics)
+  lyricsLongNoteGlow?: boolean;      // Uzun notalarda dinamik aura/ışıma (BetterLyrics)
+  lyricsWordSweep?: boolean;         // Kelime içi yumuşak degrade dolgu (BetterLyrics)
+  lyricsTranslationEnabled?: boolean;// Çeviri satırı gösterimi
+  lyricsRomanizationEnabled?: boolean;// Romaji / Latinizasyon satırı gösterimi
   
   // 3D Avatar Performans Katmanı Konfigürasyonu (6-Layer Architecture)
   performanceLayers?: Partial<PerformanceLayerConfig>;
@@ -586,6 +609,9 @@ export interface MusicGenreTemplate {
   previewColors: string[];
   fontFamily: 'serif' | 'sans' | 'mono' | 'display';
   settings: Partial<VisualizerSettings>;
+  thumbnail?: string;
+  badge?: 'NEW' | 'Pro' | null;
+  bgImageUrl?: string;
 }
 
 export type AssetCategory = 'BACKGROUND' | 'OVERLAY' | 'GEOMETRIC_LAYER';
