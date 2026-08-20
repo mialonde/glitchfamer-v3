@@ -411,7 +411,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
             <div className="space-y-1.5 pt-2">
               <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                 <span>EFEKT HIZI / ZAMANLAYICI CARPANI:</span>
-                <span className="text-accent font-bold">{(settings.objFaceCycleSpeed ?? 1.0).toFixed(1)}x</span>
+                <span className="text-accent font-bold">{Number(settings.objFaceCycleSpeed ?? 1.0).toFixed(1)}x</span>
               </div>
               <input
                 type="range"
@@ -512,7 +512,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                     <span>HIZ:</span>
-                    <span className="text-accent font-bold">{(settings.visSpeed ?? 1.0).toFixed(1)}x</span>
+                    <span className="text-accent font-bold">{Number(settings.visSpeed ?? 1.0).toFixed(1)}x</span>
                   </div>
                   <input 
                     type="range" min="0.2" max="2.5" step="0.1" 
@@ -527,7 +527,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                     <span>ÖLÇEK:</span>
-                    <span className="text-accent font-bold">{(settings.visScale ?? 1.0).toFixed(1)}x</span>
+                    <span className="text-accent font-bold">{Number(settings.visScale ?? 1.0).toFixed(1)}x</span>
                   </div>
                   <input 
                     type="range" min="0.5" max="2.0" step="0.05" 
@@ -542,7 +542,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                     <span>YOĞUNLUK:</span>
-                    <span className="text-accent font-bold">{(settings.visDensity ?? 1.0).toFixed(1)}x</span>
+                    <span className="text-accent font-bold">{Number(settings.visDensity ?? 1.0).toFixed(1)}x</span>
                   </div>
                   <input 
                     type="range" min="0.4" max="2.0" step="0.1" 
@@ -557,7 +557,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                     <span>DÖNME HIZI:</span>
-                    <span className="text-accent font-bold">{(settings.visRotation ?? 0.5).toFixed(1)}x</span>
+                    <span className="text-accent font-bold">{Number(settings.visRotation ?? 0.5).toFixed(1)}x</span>
                   </div>
                   <input 
                     type="range" min="-2.0" max="2.0" step="0.1" 
@@ -572,7 +572,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                     <span>PARLAMA / GLOW:</span>
-                    <span className="text-accent font-bold">{(settings.visGlow ?? 0.5).toFixed(2)}x</span>
+                    <span className="text-accent font-bold">{Number(settings.visGlow ?? 0.5).toFixed(2)}x</span>
                   </div>
                   <input 
                     type="range" min="0.0" max="1.0" step="0.05" 
@@ -587,7 +587,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                     <span>BEAT HASSASİYETİ:</span>
-                    <span className="text-accent font-bold">{(settings.visBeatSensitivity ?? 1.0).toFixed(1)}x</span>
+                    <span className="text-accent font-bold">{Number(settings.visBeatSensitivity ?? 1.0).toFixed(1)}x</span>
                   </div>
                   <input 
                     type="range" min="0.4" max="2.5" step="0.1" 
@@ -602,7 +602,7 @@ export const VisualizerTab: React.FC<VisualizerTabProps> = ({
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] font-sans text-content-secondary">
                     <span>RENK GEÇİŞİ:</span>
-                    <span className="text-accent font-bold">{(settings.visColorShift ?? 0.2).toFixed(2)}x</span>
+                    <span className="text-accent font-bold">{Number(settings.visColorShift ?? 0.2).toFixed(2)}x</span>
                   </div>
                   <input 
                     type="range" min="0.0" max="1.0" step="0.05" 

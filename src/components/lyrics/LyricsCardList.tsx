@@ -34,8 +34,9 @@ export const LyricsCardList: React.FC<LyricsCardListProps> = ({
   onLoadDemoLyrics
 }) => {
   const formatTimeSeconds = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = (sec % 60).toFixed(2);
+    const numSec = Number(sec) || 0;
+    const m = Math.floor(numSec / 60);
+    const s = Number(numSec % 60 || 0).toFixed(2);
     return `${m}:${s.padStart(5, '0')}`;
   };
 
@@ -101,7 +102,7 @@ export const LyricsCardList: React.FC<LyricsCardListProps> = ({
                   </div>
 
                   <span className="text-[9px] font-mono text-content-secondary bg-surface px-1.5 py-0.5 rounded border border-border-subtle">
-                    {durationSpan.toFixed(1)}s
+                    {Number(durationSpan || 0).toFixed(1)}s
                   </span>
                 </div>
 
@@ -213,7 +214,7 @@ export const LyricsCardList: React.FC<LyricsCardListProps> = ({
                       <div className="mt-2 py-1 px-2.5 bg-accent/5 border border-accent/20 rounded-md flex items-center justify-between text-[9px] font-mono text-accent">
                         <span className="flex items-center gap-1.5 font-bold">
                           <Music size={11} className="text-accent" />
-                          <span>{gap.toFixed(1)}s ENSTRÜMANTAL BOŞLUK / NEFES</span>
+                          <span>{Number(gap || 0).toFixed(1)}s ENSTRÜMANTAL BOŞLUK / NEFES</span>
                         </span>
                         <span className="font-bold tracking-widest text-[10px]">• • •</span>
                       </div>

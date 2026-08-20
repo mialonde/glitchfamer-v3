@@ -205,8 +205,8 @@ export class SimulationVisualizer implements IVisualizer {
     ctx.save();
     ctx.font = '9px monospace';
     ctx.fillStyle = `${settings.primaryColor}cc`;
-    ctx.fillText(`TARGET_LOCK // SYNC: ${(audio.energy * 100).toFixed(0)}%`, leftX, botY + 18);
-    ctx.fillText(`BIOMETRIC_IRIS: ${this.pupilSize.toFixed(2)}x`, rightX - 120, botY + 18);
+    ctx.fillText(`TARGET_LOCK // SYNC: ${Number((audio.energy || 0) * 100).toFixed(0)}%`, leftX, botY + 18);
+    ctx.fillText(`BIOMETRIC_IRIS: ${Number(this.pupilSize || 0).toFixed(2)}x`, rightX - 120, botY + 18);
 
     // Dynamic CRT Horizontal Scanline
     ctx.fillStyle = `${settings.primaryColor}44`;

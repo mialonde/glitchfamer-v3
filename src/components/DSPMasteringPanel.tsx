@@ -140,7 +140,7 @@ export const DSPMasteringPanel: React.FC<DSPMasteringPanelProps> = ({ className 
         <div className="space-y-1">
           <div className="flex justify-between text-[10px] font-mono text-content-secondary">
             <span>BASS BOOST (80Hz):</span>
-            <span className="text-accent font-bold">{(mastering.bassBoost ?? 0).toFixed(1)} dB</span>
+            <span className="text-accent font-bold">{Number(mastering.bassBoost ?? 0).toFixed(1)} dB</span>
           </div>
           <Slider
             min={-6}
@@ -156,7 +156,7 @@ export const DSPMasteringPanel: React.FC<DSPMasteringPanelProps> = ({ className 
         <div className="space-y-1">
           <div className="flex justify-between text-[10px] font-mono text-content-secondary">
             <span>MID PRESENCE (1.5kHz):</span>
-            <span className="text-accent font-bold">{(mastering.midPresence ?? 0).toFixed(1)} dB</span>
+            <span className="text-accent font-bold">{Number(mastering.midPresence ?? 0).toFixed(1)} dB</span>
           </div>
           <Slider
             min={-6}
@@ -172,7 +172,7 @@ export const DSPMasteringPanel: React.FC<DSPMasteringPanelProps> = ({ className 
         <div className="space-y-1">
           <div className="flex justify-between text-[10px] font-mono text-content-secondary">
             <span>TREBLE AIR (10kHz):</span>
-            <span className="text-accent font-bold">{(mastering.trebleAir ?? 0).toFixed(1)} dB</span>
+            <span className="text-accent font-bold">{Number(mastering.trebleAir ?? 0).toFixed(1)} dB</span>
           </div>
           <Slider
             min={-6}
@@ -206,7 +206,7 @@ export const DSPMasteringPanel: React.FC<DSPMasteringPanelProps> = ({ className 
         <div className="flex items-center gap-2">
           <Gauge size={13} className={reduction < -0.5 ? "text-amber-400" : "text-content-tertiary"} />
           <span>GAIN REDUCTION:</span>
-          <span className="text-content-primary font-bold">{reduction.toFixed(1)} dB</span>
+          <span className="text-content-primary font-bold">{Number(reduction || 0).toFixed(1)} dB</span>
         </div>
         <div className="flex items-center gap-2">
           <span>HEDEF:</span>

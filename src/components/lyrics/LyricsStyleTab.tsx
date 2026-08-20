@@ -254,7 +254,7 @@ export const LyricsStyleTab: React.FC<LyricsStyleTabProps> = ({
             <span className="text-content-secondary uppercase font-bold flex items-center gap-1">
               <Zap size={12} className="text-accent" /> RİTİM TEPKİSİ (KICK BOUNCE):
             </span>
-            <span className="text-accent font-mono font-bold">{(settings.lyricsBeatScale ?? 1.0).toFixed(1)}x</span>
+            <span className="text-accent font-mono font-bold">{Number(settings.lyricsBeatScale ?? 1.0).toFixed(1)}x</span>
           </div>
           <Slider
             min={0}

@@ -336,7 +336,7 @@ export const MediaTab: React.FC<MediaTabProps> = ({
               <div className="space-y-1">
                 <div className="flex justify-between text-[10px] font-mono text-content-secondary">
                   <span>BULANIKLIK:</span>
-                  <span className="text-accent">{(settings.bgImageBlur ?? 0).toFixed(0)}px</span>
+                  <span className="text-accent">{Number(settings.bgImageBlur ?? 0).toFixed(0)}px</span>
                 </div>
                 <Slider 
                   min={0} max={25} step={1}

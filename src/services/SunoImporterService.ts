@@ -428,7 +428,7 @@ export class SunoImporterService {
 
   /**
    * Suno'nun kelime bazlı zamanlamalarını (extractedWords) şarkının orijinal prompt satırlarıyla (rawPrompt)
-   * %100 birebir eşleştirir. Prompt bulunamazsa kelime akışındaki \n işaretleri ve vokal esleri kullanır.
+   * %100 birebir eşleştirir. (get-suno-lyric / Suno Lyric Downloader motoru standartlarında)
    */
   private alignWordsWithPrompt(
     rawPrompt: string,
@@ -441,78 +441,117 @@ export class SunoImporterService {
       .map(l => l.trim())
       .filter(l => l.length > 0 && !isStructureMarkerToken(l));
 
+    if (!extractedWords || extractedWords.length === 0) {
+      return [];
+    }
+
+    // YÖNTEM 1 (En Güvenilir & Doğrudan): Suno kelimelerindeki \n (newline) işaretlerine göre doğal gruplama.
+    const hasExplicitNewlinesInWords = extractedWords.some(w => w.hasNewline);
+
+    if (hasExplicitNewlinesInWords || promptLines.length === 0) {
+      const grouped = this.groupWordsIntoLines(extractedWords);
+      return this.smoothLineDurations(grouped);
+    }
+
+    // YÖNTEM 2: Prompt Satırlarıyla Akıllı Bulanık (Fuzzy) Eşleme
+    const normalizeWord = (str: string) => (str || "")
+      .toLowerCase()
+      .replace(/[\[\]\(\)\{\}\<\>\,\.\!\?\:\;\"\'\-\–\—\…]/g, '')
+      .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
+      .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
+      .trim();
+
     let rawLines: SyncedLine[] = [];
+    let wordIdx = 0;
 
-    // Strateji A: Eğer yazılı prompt satırları mevcutsa ve kelimeler uyuşuyorsa, doğrudan prompt satırlarına bağla
-    if (promptLines.length > 0 && extractedWords.length > 0) {
-      let wordIdx = 0;
+    for (let l = 0; l < promptLines.length; l++) {
+      const lineText = promptLines[l];
+      const targetWords = lineText
+        .split(/\s+/)
+        .map(w => w.trim())
+        .filter(w => Boolean(w) && !isStructureMarkerToken(w));
 
-      for (let l = 0; l < promptLines.length; l++) {
-        const lineText = promptLines[l];
-        const targetWords = lineText.split(/\s+/).filter(w => Boolean(w) && !isStructureMarkerToken(w));
-        if (targetWords.length === 0) continue;
+      if (targetWords.length === 0) continue;
 
-        const lineMatchedWords: SyncedWord[] = [];
-        const maxTake = targetWords.length;
+      const normTargets = targetWords.map(normalizeWord).filter(Boolean);
+      if (normTargets.length === 0) continue;
 
-        for (let w = 0; w < maxTake && wordIdx < extractedWords.length; w++) {
-          const matched = extractedWords[wordIdx];
-          lineMatchedWords.push({
-            word: matched.text,
-            startTime: matched.startTime,
-            endTime: matched.endTime
-          });
-          wordIdx++;
-        }
+      // İlk kelimeyi extractedWords dizisinde wordIdx konumundan itibaren esnek pencereli ara (max 30 kelime)
+      let matchedStartIdx = -1;
+      const searchEnd = Math.min(extractedWords.length, wordIdx + 30);
 
-        if (lineMatchedWords.length > 0) {
-          rawLines.push({
-            startTime: lineMatchedWords[0].startTime,
-            endTime: lineMatchedWords[lineMatchedWords.length - 1].endTime,
-            text: lineText,
-            words: lineMatchedWords
-          });
+      for (let i = wordIdx; i < searchEnd; i++) {
+        const ewNorm = normalizeWord(extractedWords[i].text);
+        if (ewNorm && (ewNorm === normTargets[0] || ewNorm.startsWith(normTargets[0]) || normTargets[0].startsWith(ewNorm))) {
+          matchedStartIdx = i;
+          break;
         }
       }
 
-      // Kalan kelimeleri de en son satıra ekle veya grup oluştur
-      if (wordIdx < extractedWords.length && rawLines.length > 0) {
-        const lastLine = rawLines[rawLines.length - 1];
-        while (wordIdx < extractedWords.length) {
-          const extra = extractedWords[wordIdx];
-          if (lastLine.words) {
-            lastLine.words.push({ word: extra.text, startTime: extra.startTime, endTime: extra.endTime });
-          }
-          lastLine.endTime = extra.endTime;
-          lastLine.text += " " + extra.text;
-          wordIdx++;
+      // Eğer kelime bulunamadıysa ama elimizde tüketilmesi gereken kelime varsa, wordIdx'ten devam et
+      if (matchedStartIdx === -1) {
+        if (wordIdx < extractedWords.length) {
+          matchedStartIdx = wordIdx;
+        } else {
+          break;
         }
+      }
+
+      const lineMatchedWords: SyncedWord[] = [];
+      let currIdx = matchedStartIdx;
+
+      for (let t = 0; t < targetWords.length && currIdx < extractedWords.length; t++) {
+        const ew = extractedWords[currIdx];
+        lineMatchedWords.push({
+          word: targetWords[t],
+          startTime: ew.startTime,
+          endTime: ew.endTime
+        });
+        currIdx++;
+      }
+
+      if (lineMatchedWords.length > 0) {
+        rawLines.push({
+          startTime: lineMatchedWords[0].startTime,
+          endTime: lineMatchedWords[lineMatchedWords.length - 1].endTime,
+          text: lineText,
+          words: lineMatchedWords
+        });
+        wordIdx = currIdx;
       }
     }
 
-    // Strateji B: Eğer prompt eşleşmediyse veya prompt yoksa, gelişmiş kelime akış motoru kullan
+    // Prompt bittiği halde geride kalan kelimeler varsa onları da ekle
+    if (wordIdx < extractedWords.length && rawLines.length > 0) {
+      const remainingWords = extractedWords.slice(wordIdx);
+      const remainingGrouped = this.groupWordsIntoLines(remainingWords);
+      rawLines.push(...remainingGrouped);
+    }
+
     if (rawLines.length === 0) {
       rawLines = this.groupWordsIntoLines(extractedWords);
     }
 
-    // ADIM 3: Satır Bitiş Sürelerini (endTime) Yumuşat ve Kesintisiz Akış Sağla
-    for (let i = 0; i < rawLines.length; i++) {
-      const curr = rawLines[i];
-      const next = rawLines[i + 1];
+    return this.smoothLineDurations(rawLines);
+  }
+
+  /** Satır bitiş sürelerini ekranda pürüzsüz tutmak için yumuşatır */
+  private smoothLineDurations(lines: SyncedLine[]): SyncedLine[] {
+    for (let i = 0; i < lines.length; i++) {
+      const curr = lines[i];
+      const next = lines[i + 1];
 
       if (next) {
-        // Sonraki satır başlamadan hemen öncesine kadar satırı ekranda pürüzsüz tut (maksimum +2.2s tutma süresi)
         const maxHold = (curr.words && curr.words.length > 0)
           ? curr.words[curr.words.length - 1].endTime + 2.2
           : curr.startTime + 5.0;
-        
+
         curr.endTime = Math.round(Math.min(next.startTime - 0.08, Math.max(curr.endTime, maxHold)) * 100) / 100;
       } else {
         curr.endTime = Math.round((curr.endTime + 2.5) * 100) / 100;
       }
     }
-
-    return rawLines;
+    return lines;
   }
 
   /**

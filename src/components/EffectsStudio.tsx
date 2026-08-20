@@ -273,7 +273,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
           <div className="bg-surface/50 p-3 rounded-lg border border-border-subtle space-y-1.5">
             <div className="flex justify-between text-[10px] font-mono">
               <span className="text-content-secondary uppercase">ANİMASYON HIZI:</span>
-              <span className="text-accent font-bold">{(settings.visSpeed ?? 1.0).toFixed(1)}x</span>
+              <span className="text-accent font-bold">{Number(settings.visSpeed ?? 1.0).toFixed(1)}x</span>
             </div>
             <Slider
               min={0.1}
@@ -288,7 +288,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
           <div className="bg-surface/50 p-3 rounded-lg border border-border-subtle space-y-1.5">
             <div className="flex justify-between text-[10px] font-mono">
               <span className="text-content-secondary uppercase">GEOMETRİ ÖLÇEĞİ:</span>
-              <span className="text-accent font-bold">{(settings.visScale ?? 1.0).toFixed(1)}x</span>
+              <span className="text-accent font-bold">{Number(settings.visScale ?? 1.0).toFixed(1)}x</span>
             </div>
             <Slider
               min={0.2}
@@ -303,7 +303,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
           <div className="bg-surface/50 p-3 rounded-lg border border-border-subtle space-y-1.5">
             <div className="flex justify-between text-[10px] font-mono">
               <span className="text-content-secondary uppercase">YOĞUNLUK / ELEMAN:</span>
-              <span className="text-accent font-bold">{(settings.visDensity ?? 1.0).toFixed(1)}x</span>
+              <span className="text-accent font-bold">{Number(settings.visDensity ?? 1.0).toFixed(1)}x</span>
             </div>
             <Slider
               min={0.2}
@@ -318,7 +318,7 @@ export const EffectsStudio: React.FC<EffectsStudioProps> = ({ settings, onChange
           <div className="bg-surface/50 p-3 rounded-lg border border-border-subtle space-y-1.5">
             <div className="flex justify-between text-[10px] font-mono">
               <span className="text-content-secondary uppercase">ROTASYON HIZI:</span>
-              <span className="text-accent font-bold">{(settings.visRotation ?? 0.5).toFixed(1)}</span>
+              <span className="text-accent font-bold">{Number(settings.visRotation ?? 0.5).toFixed(1)}</span>
             </div>
             <Slider
               min={-2.0}

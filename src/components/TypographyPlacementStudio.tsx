@@ -222,8 +222,8 @@ export const TypographyPlacementStudio: React.FC<TypographyPlacementStudioProps>
                 Şarkı Adı Konumu
               </span>
               <div className="flex items-center gap-2 text-[9px] font-mono text-accent">
-                <span>X: %{titleX.toFixed(1)}</span>
-                <span>Y: %{titleY.toFixed(1)}</span>
+                <span>X: %{Number(titleX ?? 0).toFixed(1)}</span>
+                <span>Y: %{Number(titleY ?? 0).toFixed(1)}</span>
               </div>
             </div>
 
@@ -289,8 +289,8 @@ export const TypographyPlacementStudio: React.FC<TypographyPlacementStudioProps>
                   Sanatçı Adı Bağımsız Konumu
                 </span>
                 <div className="flex items-center gap-2 text-[9px] font-mono text-amber-400">
-                  <span>X: %{artistX.toFixed(1)}</span>
-                  <span>Y: %{artistY.toFixed(1)}</span>
+                  <span>X: %{Number(artistX ?? 0).toFixed(1)}</span>
+                  <span>Y: %{Number(artistY ?? 0).toFixed(1)}</span>
                 </div>
               </div>
 

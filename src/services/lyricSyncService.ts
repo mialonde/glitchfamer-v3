@@ -530,7 +530,7 @@ export function parseUniversalLyrics(text: string, defaultDuration = 180): Synce
  * Düz şarkı sözü metnini hece, kelime ve karakter ağırlıklı akıllı müzikal kadans motoru ile
  * toplam şarkı süresine göre dinamik ve son derece doğal aralıklarla senkronize eder.
  */
-export function autoSyncLyricsByDuration(rawText: string, totalDuration: number): SyncedLine[] {
+export function autoSyncLyricsByDuration(rawText: string, totalDuration: number, customIntroTime?: number): SyncedLine[] {
   if (!rawText || !rawText.trim()) return [];
 
   const cleanedText = cleanLyricsText(rawText);
@@ -544,8 +544,9 @@ export function autoSyncLyricsByDuration(rawText: string, totalDuration: number)
   const songDuration = totalDuration > 10 ? totalDuration : 180;
 
   // 1. Akıllı Intro & Outro Payı (Müzikal Giriş/Çıkış Payı)
-  // Şarkı süresine göre 4s ile 12s arasında doğal intro payı
-  const introTime = Math.min(10.0, Math.max(4.0, songDuration * 0.045));
+  const introTime = typeof customIntroTime === 'number' && customIntroTime >= 0
+    ? customIntroTime
+    : Math.min(10.0, Math.max(4.0, songDuration * 0.045));
   const outroTime = Math.min(12.0, Math.max(5.0, songDuration * 0.04));
   const usableDuration = Math.max(10.0, songDuration - introTime - outroTime);
 

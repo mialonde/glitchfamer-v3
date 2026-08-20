@@ -268,7 +268,7 @@ export const SocialMediaStudio: React.FC<SocialMediaStudioProps> = ({
         <div className="space-y-1.5 pt-1">
           <label className="text-[10px] text-content-secondary flex items-center justify-between uppercase">
             <span className="flex items-center gap-1"><Clock size={10} className="text-amber-400" /> HIZLI SNIPPET ŞABLONLARI</span>
-            <span className="text-amber-400 font-mono font-bold">Kesit: {snippetLength.toFixed(1)} sn</span>
+            <span className="text-amber-400 font-mono font-bold">Kesit: {Number(snippetLength || 0).toFixed(1)} sn</span>
           </label>
           <div className="grid grid-cols-4 gap-1.5">
             {[

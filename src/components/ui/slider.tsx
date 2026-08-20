@@ -28,14 +28,16 @@ export const Slider: React.FC<SliderProps> = ({
   className,
   formatValue
 }) => {
+  const numVal = typeof value === "number" && !isNaN(value) ? value : Number(value) || 0;
+
   const percentage = Math.min(
     100,
-    Math.max(0, ((value - min) / (max - min)) * 100)
+    Math.max(0, ((numVal - min) / (max - min)) * 100)
   );
 
   const displayVal = formatValue
-    ? formatValue(value)
-    : `${Number.isInteger(step) ? value : value.toFixed(2)}${unit}`;
+    ? formatValue(numVal)
+    : `${Number.isInteger(step) ? numVal : numVal.toFixed(2)}${unit}`;
 
   const handleDoubleClick = () => {
     if (defaultValue !== undefined && !disabled) {
@@ -71,7 +73,7 @@ export const Slider: React.FC<SliderProps> = ({
           min={min}
           max={max}
           step={step}
-          value={value}
+          value={numVal}
           disabled={disabled}
           onChange={(e) => onChange(parseFloat(e.target.value))}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"

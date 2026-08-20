@@ -961,8 +961,8 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
               DÜZENLENEN: <span className="text-white font-bold">{selectedTextElement === 'title' ? 'ŞARKI BAŞLIĞI' : 'SANATÇI ADI'}</span>
             </div>
             <div className="flex items-center gap-2 text-zinc-400">
-              X: <span className={isSnappedX ? 'text-emerald-400 font-bold' : 'text-[#FFD700]'}>%{selectedTextElement === 'title' ? (settings.titleX ?? 50).toFixed(1) : (settings.artistX ?? 50).toFixed(1)}</span>
-              Y: <span className="text-[#FFD700]">%{selectedTextElement === 'title' ? (settings.titleY ?? 78).toFixed(1) : (settings.artistY ?? 84).toFixed(1)}</span>
+              X: <span className={isSnappedX ? 'text-emerald-400 font-bold' : 'text-[#FFD700]'}>%{selectedTextElement === 'title' ? Number(settings.titleX ?? 50).toFixed(1) : Number(settings.artistX ?? 50).toFixed(1)}</span>
+              Y: <span className="text-[#FFD700]">%{selectedTextElement === 'title' ? Number(settings.titleY ?? 78).toFixed(1) : Number(settings.artistY ?? 84).toFixed(1)}</span>
             </div>
             <div className="text-[7.5px] text-zinc-500 mt-0.5 uppercase">
               MOD: {settings.titlePositionMode === 'independent' ? 'BAĞIMSIZ BÖLGE' : 'BİRLEŞİK TAKİP'}

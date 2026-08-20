@@ -426,7 +426,7 @@ export class NeuralNoirVisualizer implements IVisualizer {
     ctx.font = '8px monospace';
     ctx.fillStyle = isDrop ? accentColor : isChorus ? primaryColor : '#71717a';
     ctx.fillText(`NEURAL SYSTEM STATE: ${this.state}`, 25, height - 25);
-    ctx.fillText(`EXP_FACTOR: ${this.explosionFactor.toFixed(3)}`, 25, height - 15);
+    ctx.fillText(`EXP_FACTOR: ${Number(this.explosionFactor || 0).toFixed(3)}`, 25, height - 15);
     ctx.restore();
   }
 }

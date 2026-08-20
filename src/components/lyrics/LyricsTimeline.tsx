@@ -38,8 +38,9 @@ export const LyricsTimeline: React.FC<LyricsTimelineProps> = ({
   onShiftAllTimestamps,
 }) => {
   const formatTimeSeconds = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = (sec % 60).toFixed(2);
+    const numSec = Number(sec) || 0;
+    const m = Math.floor(numSec / 60);
+    const s = Number(numSec % 60 || 0).toFixed(2);
     return `${m}:${s.padStart(5, '0')}`;
   };
 
@@ -70,7 +71,7 @@ export const LyricsTimeline: React.FC<LyricsTimelineProps> = ({
               return (
                 <div
                   key={idx}
-                  title={`[${idx + 1}] ${line.text} (${line.startTime.toFixed(1)}s - ${line.endTime.toFixed(1)}s)`}
+                  title={`[${idx + 1}] ${line.text} (${Number(line.startTime ?? 0).toFixed(1)}s - ${Number(line.endTime ?? 0).toFixed(1)}s)`}
                   style={{ left: `${left}%`, width: `${width}%` }}
                   className={cn(
                     "absolute top-1 bottom-1 rounded-[2px] transition-all border border-black/30",
@@ -161,7 +162,7 @@ export const LyricsTimeline: React.FC<LyricsTimelineProps> = ({
                   className="text-amber-300 hover:text-amber-200 bg-amber-950/40 border border-amber-600/60 text-xs font-bold uppercase gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.2)] animate-pulse"
                 >
                   <Target size={14} className="text-amber-400" />
-                  <span>1. SATIRI {formatTimeSeconds(currentTime)}'E HİZALA ({shiftDelta >= 0 ? `+${shiftDelta.toFixed(2)}s` : `${shiftDelta.toFixed(2)}s`})</span>
+                  <span>1. SATIRI {formatTimeSeconds(currentTime)}'E HİZALA ({shiftDelta >= 0 ? `+${Number(shiftDelta || 0).toFixed(2)}s` : `${Number(shiftDelta || 0).toFixed(2)}s`})</span>
                 </Button>
               );
             })()
@@ -185,7 +186,7 @@ export const LyricsTimeline: React.FC<LyricsTimelineProps> = ({
                 -0.1s
               </Button>
               <span className="font-mono text-xs font-bold text-content-primary px-1 min-w-[45px] text-center">
-                {syncOffset > 0 ? `+${syncOffset.toFixed(2)}s` : `${syncOffset.toFixed(2)}s`}
+                {syncOffset > 0 ? `+${Number(syncOffset || 0).toFixed(2)}s` : `${Number(syncOffset || 0).toFixed(2)}s`}
               </span>
               <Button
                 type="button"

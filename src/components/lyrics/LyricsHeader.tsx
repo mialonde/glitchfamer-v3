@@ -26,8 +26,9 @@ export const LyricsHeader: React.FC<LyricsHeaderProps> = ({
   onTogglePlay
 }) => {
   const formatTimeSeconds = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = (sec % 60).toFixed(2);
+    const numSec = Number(sec) || 0;
+    const m = Math.floor(numSec / 60);
+    const s = Number(numSec % 60 || 0).toFixed(2);
     return `${m}:${s.padStart(5, '0')}`;
   };
 
