@@ -541,6 +541,9 @@ export default function App() {
       setCoverUrl(track.imageUrl);
     }
 
+    // [DEBUG LOG - App State]
+    console.log("[DEBUG - APP STATE] Setting lyrics from Suno Track:", track.syncedLines);
+
     setSettings(s => ({
       ...s,
       trackTitle: track.title,
@@ -552,6 +555,9 @@ export default function App() {
 
     setCurrentTime(0);
     setIsSunoModalOpen(false);
+    // Suno içe aktarıldığında otomatik olarak Stüdyo & Şarkı Sözü Sekmesine geç
+    setUiLayer('STUDIO');
+    setActiveTab('lyrics');
   };
 
   // Şablon Seçildiğinde Stüdyoya Uygula
@@ -854,8 +860,8 @@ export default function App() {
 
   const visualizerCanvasNode = (
     <VisualizerCanvas
-      ref={canvasHandleRef}
       audioRef={audioRef}
+      ref={canvasHandleRef}
       analyserRef={analyserRef}
       vocalAnalyserRef={vocalAnalyserRef}
       audioTrack={audioTrack}
@@ -953,6 +959,34 @@ export default function App() {
           isPlaying={isPlaying}
           onTogglePlay={togglePlay}
         />
+
+        {/* Global Modallar */}
+        <SunoImporter
+          isOpen={isSunoModalOpen}
+          onClose={() => setIsSunoModalOpen(false)}
+          onImportTrack={handleSunoImport}
+        />
+        <TemplatePickerModal
+          isOpen={isTemplateModalOpen}
+          onClose={() => setIsTemplateModalOpen(false)}
+          currentSettings={settings}
+          onApplyTemplate={handleApplyTemplate}
+        />
+        <ReleasePackStudioModal
+          isOpen={isReleasePackModalOpen}
+          onClose={() => setIsReleasePackModalOpen(false)}
+          audioDuration={duration || 120}
+          trackTitle={settings.trackTitle || "Vidframer Track"}
+          settings={settings}
+          onCompletePack={() => setIsFeedbackModalOpen(true)}
+        />
+        <PostRenderFeedbackModal
+          isOpen={isFeedbackModalOpen}
+          onClose={() => setIsFeedbackModalOpen(false)}
+          visualizer={settings.mode}
+          resolution={settings.aspectRatio}
+          durationSec={Math.round(duration || 60)}
+        />
       </main>
     );
   }
@@ -998,6 +1032,34 @@ export default function App() {
           onSwitchToAdmin={() => setUiLayer('ADMIN')}
           onLoadDemoTrack={loadDemoTrack}
           canvasNode={visualizerCanvasNode}
+        />
+
+        {/* Global Modallar */}
+        <SunoImporter
+          isOpen={isSunoModalOpen}
+          onClose={() => setIsSunoModalOpen(false)}
+          onImportTrack={handleSunoImport}
+        />
+        <TemplatePickerModal
+          isOpen={isTemplateModalOpen}
+          onClose={() => setIsTemplateModalOpen(false)}
+          currentSettings={settings}
+          onApplyTemplate={handleApplyTemplate}
+        />
+        <ReleasePackStudioModal
+          isOpen={isReleasePackModalOpen}
+          onClose={() => setIsReleasePackModalOpen(false)}
+          audioDuration={duration || 120}
+          trackTitle={settings.trackTitle || "Vidframer Track"}
+          settings={settings}
+          onCompletePack={() => setIsFeedbackModalOpen(true)}
+        />
+        <PostRenderFeedbackModal
+          isOpen={isFeedbackModalOpen}
+          onClose={() => setIsFeedbackModalOpen(false)}
+          visualizer={settings.mode}
+          resolution={settings.aspectRatio}
+          durationSec={Math.round(duration || 60)}
         />
       </main>
     );
@@ -1576,6 +1638,7 @@ export default function App() {
                                 </p>
                                 <div className="border border-zinc-800 bg-zinc-950/60 p-2 rounded-lg max-h-[500px] overflow-y-auto custom-scrollbar">
                                   <LyricsStudio
+                                    audioRef={audioRef}
                                     settings={settings}
                                     currentTime={currentTime}
                                     duration={duration || 120}
@@ -1828,6 +1891,7 @@ export default function App() {
                 {activeTab === 'lyrics' && (
                   <div className="space-y-6 animate-in fade-in-50 duration-150">
                     <LyricsStudio
+                                    audioRef={audioRef}
                       settings={settings}
                       currentTime={currentTime}
                       duration={duration || 120}

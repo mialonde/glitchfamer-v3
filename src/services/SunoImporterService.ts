@@ -165,10 +165,15 @@ export class SunoImporterService {
       }
     }
 
+    if (Array.isArray(rawData) && rawData.length > 0) {
+      rawData = rawData[0];
+    }
+    const resolvedTrackId = rawData?.id || trackId;
+
     // ADIM 3: Eğer parça bilgisi geldi ama hizalama (aligned_lyrics) eksikse, alignment endpoint'ini sorgula
-    if (rawData && trackId && (!rawData.aligned_lyrics && !rawData.metadata?.alignment)) {
+    if (rawData && resolvedTrackId && (!rawData.aligned_lyrics && !rawData.metadata?.alignment)) {
       try {
-        const alignRes = await fetch(`/api/suno/aligned-lyrics/${trackId}`);
+        const alignRes = await fetch(`/api/suno/aligned-lyrics/${resolvedTrackId}`);
         if (alignRes.ok) {
           const alignJson = await alignRes.json();
           if (alignJson?.words) {
@@ -180,16 +185,12 @@ export class SunoImporterService {
       } catch (_) {}
     }
 
-    if (!rawData && !trackId) {
+    if (!rawData && !resolvedTrackId) {
       throw new Error("Suno bağlantısından şarkı bilgisi çözümlenemedi. Lütfen bağlantıyı kontrol edin.");
     }
 
-    if (Array.isArray(rawData) && rawData.length > 0) {
-      rawData = rawData[0];
-    }
-
     // ADIM 4: Veriyi normalize et
-    return this.normalizeSunoData(rawData, trackId || rawData?.id || "suno-track");
+    return this.normalizeSunoData(rawData, resolvedTrackId || "suno-track");
   }
 
   /**
@@ -260,6 +261,7 @@ export class SunoImporterService {
 
   /**
    * Suno lyrics prompt'u ve alignment verilerini parse eder.
+   * (get-suno-lyric / Suno Lyric Downloader motoru algoritması ile %100 uyumlu)
    */
   private parseAlignmentAndLyrics(
     rawPrompt: string,
@@ -271,108 +273,81 @@ export class SunoImporterService {
     syncedLines: SyncedLine[];
     hasWordLevelTimestamps: boolean;
   } {
-    const extractedWords: (SunoWordTimestamp & { hasNewline?: boolean })[] = [];
-    const timelineWords: SunoTimelineWord[] = [];
-
-    // Durum 1: Suno Alignment / Word Timestamps dizisi mevcutsa
+    // Durum 1: Suno Alignment / Word Timestamps dizisi mevcutsa (get-suno-lyric motoru)
     if (alignmentData && Array.isArray(alignmentData) && alignmentData.length > 0) {
-      let bracketBuffer: { text: string; start: number; end: number }[] = [];
-      let insideBracket = false;
+      const extractedWords: (SunoWordTimestamp & { hasNewline?: boolean })[] = [];
+      const timelineWords: SunoTimelineWord[] = [];
 
       for (let i = 0; i < alignmentData.length; i++) {
         const item = alignmentData[i];
-        const text = item.word || item.text || item.token || "";
+        if (!item || typeof item !== 'object') continue;
+
+        const rawText = (item.text ?? item.word ?? item.token ?? "").toString();
         
-        // Suno API varyasyonları (start, start_s, startTime, begin)
-        const startTime = typeof item.start === 'number' 
-          ? item.start 
-          : (typeof item.start_s === 'number' ? item.start_s : (item.startTime ?? item.begin ?? 0));
+        // Suno API varyasyonları (start_s, start, startTime, begin)
+        const startTime = typeof item.start_s === 'number' 
+          ? item.start_s 
+          : (typeof item.start === 'number' ? item.start : (item.startTime ?? item.begin ?? 0));
         
-        const endTime = typeof item.end === 'number' 
-          ? item.end 
-          : (typeof item.end_s === 'number' ? item.end_s : (item.endTime ?? (startTime + 0.35)));
+        const endTime = typeof item.end_s === 'number' 
+          ? item.end_s 
+          : (typeof item.end === 'number' ? item.end : (item.endTime ?? (startTime + 0.35)));
 
-        if (!text) continue;
-        
-        // Satır sonu karakteri içerip içermediğini kontrol et (trilmeden önce)
-        const hasNewline = /\n|\r/.test(text);
-        const rawWord = text.trim();
+        const hasNewline = Boolean(item.has_newline ?? item.hasNewline ?? /\n|\r/.test(rawText));
+        const cleanWord = rawText.replace(/[\r\n]/g, "").trim();
 
-        if (!rawWord) continue;
-
-        // Tek başına direkt yapı belirteci ise atla ([Verse], [Chorus], (Solo), vb.)
-        if (isStructureMarkerToken(rawWord)) {
-          continue;
-        }
-
-        // Çok kelimeli parantez / köşeli parantez bloklarını yakalama: örn. "(Pause", "-", "Single", "Kick)"
-        if (rawWord.startsWith('(') || rawWord.startsWith('[') || rawWord.startsWith('{')) {
-          insideBracket = true;
-          bracketBuffer = [{ text: rawWord, start: startTime, end: endTime }];
-          
-          if (rawWord.endsWith(')') || rawWord.endsWith(']') || rawWord.endsWith('}')) {
-            insideBracket = false;
-            const fullBlock = bracketBuffer.map(b => b.text).join(' ');
-            if (isStructureMarkerToken(fullBlock) || /^\([^)]+\)$/.test(fullBlock)) {
-              bracketBuffer = [];
-              continue;
-            }
-            bracketBuffer = [];
-          }
-          continue;
-        } else if (insideBracket) {
-          bracketBuffer.push({ text: rawWord, start: startTime, end: endTime });
-          if (rawWord.endsWith(')') || rawWord.endsWith(']') || rawWord.endsWith('}')) {
-            insideBracket = false;
-            const fullBlock = bracketBuffer.map(b => b.text).join(' ');
-            if (isStructureMarkerToken(fullBlock) || /^\([^)]+\)$/.test(fullBlock)) {
-              bracketBuffer = [];
-              continue;
-            }
-            // Müzik komutu değilse buffer'dakileri ekle
-            for (const b of bracketBuffer) {
-              const cleaned = cleanLyricsText(b.text);
-              if (cleaned && !isStructureMarkerToken(cleaned)) {
-                const s = Math.max(0, Math.round(b.start * 100) / 100);
-                const e = Math.max(s + 0.1, Math.round(b.end * 100) / 100);
-                extractedWords.push({ text: cleaned, startTime: s, endTime: e });
-                timelineWords.push({ word: cleaned, startTime: s, endTime: e });
-              }
-            }
-            bracketBuffer = [];
-          }
-          continue;
-        }
-
-        // Kalan parantez ve köşeli işaretleri temizle
-        const cleanWord = rawWord
-          .replace(/[\[\]\{\}<>]/g, '')
-          .replace(/\([^)]*\)/g, '')
-          .trim();
+        // We will do a consolidated jitter analysis after the loop instead of spamming console.log here.
 
         if (!cleanWord || isStructureMarkerToken(cleanWord)) {
           continue;
         }
 
         const s = Math.max(0, Math.round(startTime * 100) / 100);
-        const e = Math.max(s + 0.1, Math.round(endTime * 100) / 100);
+        const e = Math.max(s + 0.05, Math.round(endTime * 100) / 100);
 
         extractedWords.push({ text: cleanWord, startTime: s, endTime: e, hasNewline });
         timelineWords.push({ word: cleanWord, startTime: s, endTime: e });
       }
-    }
 
-    // Eğer word-level timestamps başarıyla alındıysa
-    if (extractedWords.length > 0) {
-      // Prompt içerisindeki yazılı satırlarla hizala veya kelime akışından grup oluştur
-      const groupedLines = this.alignWordsWithPrompt(rawPrompt, extractedWords, timelineWords);
-      const enrichedLines = phonemeEngine.enrichLyricsWithPhonemes(groupedLines);
-      return {
-        words: extractedWords,
-        lyricsTimeline: timelineWords,
-        syncedLines: enrichedLines,
-        hasWordLevelTimestamps: true
-      };
+      if (extractedWords.length > 0) {
+        // [DEBUG LOG] Consolidated Jitter Analysis
+        console.groupCollapsed("[SYNC DEBUG] Suno Raw Word Timestamps & Jitter Analysis");
+        const tableData = extractedWords.map((w, i) => {
+          const prev = i > 0 ? extractedWords[i-1] : null;
+          const gap = prev ? (w.startTime - prev.endTime).toFixed(3) : '0.000';
+          const duration = (w.endTime - w.startTime).toFixed(3);
+          const isJittery = prev ? (w.startTime < prev.startTime || w.startTime < prev.endTime - 0.1) : false; // Allow slight overlap
+          
+          return {
+            Word: w.text,
+            Start: w.startTime.toFixed(3),
+            End: w.endTime.toFixed(3),
+            Duration: duration,
+            GapToPrev: gap,
+            Jitter: isJittery ? '⚠️ YES' : 'NO'
+          };
+        });
+        console.table(tableData);
+        
+        const jitterCount = tableData.filter(d => d.Jitter !== 'NO').length;
+        if (jitterCount > 0) {
+          console.warn(`[SYNC WARNING] Detected ${jitterCount} potential jittery/overlapping timestamps from Suno payload! This may cause visual stuttering.`);
+        } else {
+          console.info("[SYNC INFO] Timestamps appear sequentially stable. No major jitter detected.");
+        }
+        console.groupEnd();
+
+        const rawLines = this.groupWordsIntoLines(extractedWords);
+        const smoothedLines = this.smoothLineDurations(rawLines);
+        const enrichedLines = phonemeEngine.enrichLyricsWithPhonemes(smoothedLines);
+
+        return {
+          words: extractedWords,
+          lyricsTimeline: timelineWords,
+          syncedLines: enrichedLines,
+          hasWordLevelTimestamps: true
+        };
+      }
     }
 
     // Durum 2: Eğer prompt içinde gömülü [00:12.34] LRC etiketleri varsa
@@ -577,16 +552,15 @@ export class SunoImporterService {
         });
       }
 
-      // Satır sonu kriterleri:
+      // Satır sonu kriterleri (get-suno-lyric standartları):
       // 1. Kelime verisinde açık \n (newline) sinyali varsa
-      // 2. İki kelime arasında 0.35s üzerinde vokal es/duraklama varsa
-      // 3. Cümle bitiş noktalaması (. ! ?)
+      // 2. İki kelime arasında 0.9s üzerinde belirgin müzikal es/duraklama varsa
+      // 3. Son kelime ise
       const isExplicitNewline = Boolean(curr.hasNewline);
-      const isPause = next && (next.startTime - curr.endTime >= 0.35);
-      const isEndOfPunctuation = /[.!?]$/.test(curr.text);
+      const isPause = next && (next.startTime - curr.endTime >= 0.9);
       const isLastWord = i === words.length - 1;
 
-      if ((isExplicitNewline || isPause || isEndOfPunctuation || isLastWord) && currentLineWords.length > 0) {
+      if ((isExplicitNewline || isPause || isLastWord) && currentLineWords.length > 0) {
         const lineEndTime = curr.endTime;
         const lineText = cleanLyricsText(currentLineWords.map(w => w.word).join(' '));
 

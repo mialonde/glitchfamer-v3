@@ -11,7 +11,7 @@ import {
   MESELE_DEMO_LRC_TEXT 
 } from '../services/lyricSyncService';
 import { sunoImporter } from '../services/SunoImporterService';
-import { Clock, Palette, Sparkles, Zap } from 'lucide-react';
+import { Clock, Palette, Sparkles, Zap, Mic2 } from 'lucide-react';
 import { Button } from './ui';
 import { cn } from '../lib/utils';
 import { LyricsHeader } from './lyrics/LyricsHeader';
@@ -20,6 +20,8 @@ import { LyricsCardList } from './lyrics/LyricsCardList';
 import { LyricsStyleTab } from './lyrics/LyricsStyleTab';
 import { LyricsSunoTab } from './lyrics/LyricsSunoTab';
 import { LyricsAutoSyncTab } from './lyrics/LyricsAutoSyncTab';
+import { LyricsLiveSyncTab } from './lyrics/LyricsLiveSyncTab';
+import { SyncDriftDebugger } from './lyrics/SyncDriftDebugger';
 
 interface LyricsStudioProps {
   settings: VisualizerSettings;
@@ -30,6 +32,7 @@ interface LyricsStudioProps {
   onChange: (updated: Partial<VisualizerSettings>) => void;
   onSeek?: (time: number) => void;
   compact?: boolean;
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
 
 const DEMO_LYRICS_TEXT = `Geceler geçmiyo'
@@ -61,9 +64,10 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
   onTogglePlay,
   onChange,
   onSeek,
-  compact = false
+  compact = false,
+  audioRef
 }) => {
-  const [activeTab, setActiveTab] = useState<'MANUAL' | 'STYLE' | 'SUNO' | 'AUTO'>('MANUAL');
+  const [activeTab, setActiveTab] = useState<'MANUAL' | 'STYLE' | 'SUNO' | 'AUTO' | 'LIVE'>('MANUAL');
   const [rawTextInput, setRawTextInput] = useState(settings.rawLyrics || DEMO_LYRICS_TEXT);
   const [rawLrcInput, setRawLrcInput] = useState(() => {
     if (settings.syncedLyrics && settings.syncedLyrics.length > 0) {
@@ -489,7 +493,8 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
   const currentActiveLine = activeLineIndex !== -1 && settings.syncedLyrics ? settings.syncedLyrics[activeLineIndex] : null;
 
   return (
-    <div className="w-full space-y-3.5 select-none">
+    <div className="w-full space-y-3.5 select-none relative">
+      <SyncDriftDebugger audioRef={audioRef} reactCurrentTime={currentTime} />
       
       {/* 1. ÜST HEADER BAR & CANLI DURUM */}
       <LyricsHeader
@@ -509,7 +514,8 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
           { id: 'MANUAL', label: `⏱️ ZAMAN ÇİZELGESİ & LİRİK LİSTESİ (${lyricsCount})`, icon: Clock },
           { id: 'STYLE', label: '🎨 TİPOGRAFİ & EKRAN YERLEŞİMİ (%Y / %X)', icon: Palette },
           { id: 'SUNO', label: '⚡ SUNO AI & İÇE / DIŞA AKTAR', icon: Sparkles },
-          { id: 'AUTO', label: '🪄 AKILLI SÜRE DAĞITICI', icon: Zap }
+          { id: 'AUTO', label: '🪄 AKILLI SÜRE DAĞITICI', icon: Zap },
+          { id: 'LIVE', label: '🎙️ CANLI SENKRON (TAP-TO-SYNC)', icon: Mic2 }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -616,6 +622,23 @@ export const LyricsStudio: React.FC<LyricsStudioProps> = ({
           duration={duration}
           onRawTextChange={setRawTextInput}
           onAutoSync={handleAutoSync}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* SEKME 5: 🎙️ CANLI SENKRON (TAP-TO-SYNC)                                   */}
+      {/* ========================================================================= */}
+      {activeTab === 'LIVE' && (
+        <LyricsLiveSyncTab
+          rawText={rawTextInput}
+          onRawTextChange={setRawTextInput}
+          audioRef={audioRef}
+          isPlaying={isPlaying}
+          onTogglePlay={onTogglePlay}
+          onApplySyncedLyrics={(lines) => {
+            onChange({ syncedLyrics: lines });
+            setActiveTab('MANUAL');
+          }}
         />
       )}
 

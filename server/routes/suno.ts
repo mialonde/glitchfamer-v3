@@ -130,7 +130,9 @@ router.post("/suno/inspect", async (req, res) => {
       if (clipData && (!clipData.metadata?.alignment && !clipData.aligned_lyrics)) {
         const alignedEndpoints = [
           `https://studio-api.prod.suno.com/api/clip/${trackId}/aligned_lyrics/`,
-          `https://studio-api.prod.suno.com/api/aligned_lyrics/${trackId}`
+          `https://studio-api.prod.suno.com/api/aligned_lyrics/${trackId}`,
+          `https://studio-api.prod.suno.com/api/gen/${trackId}/aligned_lyrics/v2/`,
+          `https://studio-api.prod.suno.com/api/clip/${trackId}/aligned_lyrics/v2/`
         ];
 
         for (const aEndpoint of alignedEndpoints) {
@@ -257,6 +259,8 @@ router.get("/suno/aligned-lyrics/:trackId", async (req, res) => {
     const alignedEndpoints = [
       `https://studio-api.prod.suno.com/api/clip/${trackId}/aligned_lyrics/`,
       `https://studio-api.prod.suno.com/api/aligned_lyrics/${trackId}`,
+      `https://studio-api.prod.suno.com/api/gen/${trackId}/aligned_lyrics/v2/`,
+      `https://studio-api.prod.suno.com/api/clip/${trackId}/aligned_lyrics/v2/`,
       `https://studio-api.prod.suno.com/api/feed/v2?ids=${trackId}`
     ];
 
@@ -270,12 +274,20 @@ router.get("/suno/aligned-lyrics/:trackId", async (req, res) => {
         }, 8000);
         if (epRes.ok) {
           const data = await epRes.json();
+          
           if (Array.isArray(data) && data.length > 0) {
-            return res.json({ trackId, words: data });
+            // Differentiate between array of words and array of tracks (feed)
+            if (data[0] && typeof data[0] === 'object' && ('word' in data[0] || 'text' in data[0] || 'start' in data[0] || 'start_time' in data[0])) {
+              return res.json({ trackId, words: data });
+            } else if (data[0] && typeof data[0] === 'object' && ('metadata' in data[0] || 'aligned_lyrics' in data[0])) {
+              const track = data[0];
+              const words = track.aligned_lyrics || track.metadata?.alignment;
+              if (words) {
+                return res.json({ trackId, words });
+              }
+            }
           } else if (data && (data.aligned_words || data.words || data.alignment)) {
             return res.json({ trackId, words: data.aligned_words || data.words || data.alignment });
-          } else if (Array.isArray(data) && data[0]?.metadata?.alignment) {
-            return res.json({ trackId, words: data[0].metadata.alignment });
           }
         }
       } catch (err) {

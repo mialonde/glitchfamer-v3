@@ -269,8 +269,10 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
     };
   }, []);
 
+  const lastLogTimeRef = useRef<number>(0);
+
   // Tek kare çizme fonksiyonu (Hem rAF hem de Web Worker tarafından tetiklenebilir)
-  const drawFrame = (currentTime: number, delta: number) => {
+  const drawFrame = (currentTimeFrame: number, delta: number) => {
     if (canvasRef.current && !rendererRef.current) {
       rendererRef.current = new StudioRenderer(canvasRef.current);
     }
@@ -284,6 +286,14 @@ export const VisualizerCanvas = forwardRef<VisualizerHandle, Props>(({
       // Ambient / Idle Animasyon
       if (isPlaying && processorRef.current && audioRef.current) {
         audioEvents = processorRef.current.process(audioRef.current.currentTime, delta);
+        
+        // [DEBUG LOG - Timing] Log once per second
+        const now = performance.now();
+        if (now - lastLogTimeRef.current > 1000) {
+          console.log(`[DEBUG - TIMING] Audio CurrentTime: ${audioRef.current.currentTime.toFixed(3)}, App Prop CurrentTime: ${currentTime.toFixed(3)}, FrameTime: ${currentTimeFrame.toFixed(3)}`);
+          lastLogTimeRef.current = now;
+        }
+
       } else {
         const now = Date.now() / 1000;
         const ambientKick = Math.pow((Math.sin(now * 3.5) + 1) / 2, 4) * 0.45;
